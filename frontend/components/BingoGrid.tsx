@@ -44,10 +44,7 @@ export default function BingoGrid({
     };
   }, []);
 
-  // Build a position-indexed map for quick lookup
-  const challengeByPosition = new Map(
-    challenges.map((c) => [c.position, c])
-  );
+  const challengeByPosition = new Map(challenges.map((c) => [c.position, c]));
 
   return (
     <section>
@@ -82,7 +79,6 @@ export default function BingoGrid({
                     : "border-stone-400 bg-amber-50",
                 ].join(" ")}
               >
-                {/* Challenge text (always visible) */}
                 <span
                   className={[
                     "text-[10px] sm:text-xs leading-tight font-semibold",
@@ -93,7 +89,6 @@ export default function BingoGrid({
                   {challenge.title}
                 </span>
 
-                {/* Completed overlay – bold red X like a map marker */}
                 {isCompleted && (
                   <span
                     aria-label="Completed"
@@ -126,7 +121,6 @@ export default function BingoGrid({
                   </span>
                 )}
 
-                {/* Center tile crown icon */}
                 {isCenter && !isCompleted && (
                   <span className="mt-1 text-base" aria-hidden="true">
                     ✦

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 import type { Participant, Challenge } from "@/types";
 
 interface CoordinatorFormProps {
@@ -17,6 +17,7 @@ export default function CoordinatorForm({
   challenges,
   sessionId,
 }: CoordinatorFormProps) {
+  const router = useRouter();
   const [participantId, setParticipantId] = useState("");
   const [challengeId, setChallengeId] = useState("");
   const [status, setStatus] = useState<FormStatus>("idle");
@@ -41,45 +42,33 @@ export default function CoordinatorForm({
     }
 
     const file = fileRef.current?.files?.[0];
-    let proofUrl: string | null = null;
 
     try {
-      // ── Upload proof image (if provided) ──────────────────────
+      setStatus("saving");
+      const formData = new FormData();
+      formData.append("participantId", participantId);
+      formData.append("challengeId", challengeId);
+      formData.append("sessionId", sessionId);
       if (file) {
         setStatus("uploading");
-        const ext = file.name.split(".").pop() ?? "jpg";
-        const path = `${sessionId}/${participantId}-${challengeId}-${Date.now()}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("proofs")
-          .upload(path, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from("proofs")
-          .getPublicUrl(path);
-
-        proofUrl = urlData.publicUrl;
+        formData.append("proof", file);
       }
 
-      // ── Insert completion record ───────────────────────────────
-      setStatus("saving");
-      const { error: insertError } = await supabase
-        .from("completions")
-        .insert({
-          participant_id: participantId,
-          challenge_id: parseInt(challengeId, 10),
-          session_id: sessionId,
-          proof_url: proofUrl,
-        });
-
-      if (insertError) throw insertError;
-
-      // ── Update participant score (atomic increment via RPC) ──
-      await supabase.rpc("increment_participant_score", {
-        p_id: participantId,
+      const response = await fetch("/api/coordinator/completions", {
+        method: "POST",
+        body: formData,
       });
+
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message ?? "Unable to log completion right now.");
+      }
+
+      router.refresh();
 
       setStatus("success");
     } catch (err: unknown) {
@@ -99,7 +88,6 @@ export default function CoordinatorForm({
 
   return (
     <div className="border-double border-4 border-stone-600 bg-amber-50/80 p-6 rounded-sm shadow-lg max-w-lg mx-auto">
-      {/* Header */}
       <h1 className="text-center text-3xl font-bold text-stone-900 tracking-wide uppercase mb-1">
         📜 Captain&apos;s Log
       </h1>
@@ -109,19 +97,15 @@ export default function CoordinatorForm({
       <hr className="border-stone-400 border-dashed mb-6" />
 
       {status === "success" ? (
-        /* ── Success state ─────────────────────────────────────── */
         <div className="text-center space-y-4">
           <div className="text-5xl">⚓</div>
-          <p className="text-xl font-bold text-stone-800">
-            Completion Logged!
-          </p>
+          <p className="text-xl font-bold text-stone-800">Completion Logged!</p>
           {selectedParticipant && selectedChallenge && (
             <p className="text-stone-600 italic text-sm">
               <span className="font-cursive text-lg text-stone-800">
                 {selectedParticipant.name}
               </span>{" "}
-              completed{" "}
-              <strong>&ldquo;{selectedChallenge.title}&rdquo;</strong>
+              completed <strong>&ldquo;{selectedChallenge.title}&rdquo;</strong>
             </p>
           )}
           <button
@@ -132,9 +116,7 @@ export default function CoordinatorForm({
           </button>
         </div>
       ) : (
-        /* ── Form ─────────────────────────────────────────────── */
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Participant dropdown */}
           <div className="space-y-1">
             <label
               htmlFor="participant"
@@ -158,7 +140,6 @@ export default function CoordinatorForm({
             </select>
           </div>
 
-          {/* Challenge dropdown */}
           <div className="space-y-1">
             <label
               htmlFor="challenge"
@@ -188,7 +169,6 @@ export default function CoordinatorForm({
             )}
           </div>
 
-          {/* Proof image (camera) */}
           <div className="space-y-1">
             <label
               htmlFor="proof"
@@ -215,14 +195,12 @@ export default function CoordinatorForm({
             </p>
           </div>
 
-          {/* Error message */}
           {errorMsg && (
             <p className="text-red-700 text-sm font-medium border border-red-300 bg-red-50 px-3 py-2 rounded-sm">
               ⚠ {errorMsg}
             </p>
           )}
 
-          {/* Submit button */}
           <button
             type="submit"
             disabled={status === "uploading" || status === "saving"}

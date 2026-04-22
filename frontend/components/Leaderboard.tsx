@@ -9,16 +9,13 @@ interface LeaderboardProps {
 }
 
 export default function Leaderboard({ initialParticipants }: LeaderboardProps) {
+  const sorted = (list: Participant[]) =>
+    [...list].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
   const [participants, setParticipants] =
-    useState<Participant[]>(initialParticipants);
+    useState<Participant[]>(() => sorted(initialParticipants));
 
   useEffect(() => {
-    // Sort helper – highest score first, then by name
-    const sorted = (list: Participant[]) =>
-      [...list].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-
-    setParticipants(sorted(initialParticipants));
-
     const channel = supabase
       .channel("participants-leaderboard")
       .on(
@@ -49,13 +46,12 @@ export default function Leaderboard({ initialParticipants }: LeaderboardProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [initialParticipants]);
+  }, []);
 
   const medals = ["🥇", "🥈", "🥉"];
 
   return (
     <aside className="border-double border-4 border-stone-600 bg-amber-50/80 p-5 rounded-sm shadow-lg">
-      {/* Header */}
       <h2 className="text-center text-2xl font-bold text-stone-900 tracking-wide uppercase mb-1">
         ⚓ Bounty Board
       </h2>
@@ -78,7 +74,6 @@ export default function Leaderboard({ initialParticipants }: LeaderboardProps) {
               <span className="text-lg w-6 shrink-0">
                 {medals[idx] ?? `${idx + 1}.`}
               </span>
-              {/* Cursive handwritten font for participant name */}
               <span className="font-cursive text-xl text-stone-800 flex-1 truncate">
                 {p.name}
               </span>
