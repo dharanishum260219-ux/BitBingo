@@ -1,11 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
-import Leaderboard from "@/components/Leaderboard";
-import BingoGrid from "@/components/BingoGrid";
-import type { Participant, Challenge, Completion } from "@/types";
-import { DEMO_CHALLENGES } from "@/lib/demo-data";
 import Link from "next/link";
 
-// Server-side Supabase client (uses the same public anon key for public data)
+import BingoGrid from "@/components/BingoGrid";
+import Leaderboard from "@/components/Leaderboard";
+import { DEMO_CHALLENGES } from "@/lib/demo-data";
+import type { Challenge, Completion, Participant } from "@/types";
+
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -27,10 +27,7 @@ export default async function HomePage() {
     const [challengesResult, participantsResult, completionsResult] =
       await Promise.all([
         db.from("challenges").select("*").order("position"),
-        db
-          .from("participants")
-          .select("*")
-          .order("score", { ascending: false }),
+        db.from("participants").select("*").order("score", { ascending: false }),
         db.from("completions").select("*"),
       ]);
 
@@ -43,49 +40,43 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8">
-      {/* ── Page header ─────────────────────────────────────── */}
-      <header className="text-center mb-8">
-        <h1 className="text-4xl sm:text-5xl font-bold text-stone-900 tracking-wide">
-          ⚓ BitBingo
-        </h1>
-        <p className="mt-2 text-stone-600 italic text-base sm:text-lg">
-          Explorer&apos;s Chart — Live Coding Competition Map
-        </p>
-        <div className="mt-3 flex justify-center gap-4 text-sm">
-          <Link
-            href="/coordinator"
-            className="inline-block px-4 py-1.5 border-2 border-red-700 text-red-700 font-bold uppercase tracking-wide rounded-sm hover:bg-red-700 hover:text-amber-50 transition-colors"
-          >
-            ⚓ Coordinator Portal
-          </Link>
+    <main className="page-enter flex-1 w-full max-w-7xl mx-auto px-4 py-8 md:py-10">
+      <header className="quest-panel px-5 py-6 md:px-8 md:py-7 mb-8">
+        <div className="quest-inset px-4 py-5 md:px-6 md:py-6 text-center">
+          <p className="text-xs md:text-sm uppercase tracking-[0.25em] text-[var(--ink-500)]">
+            Live Tournament Arena
+          </p>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl leading-none mt-2 text-[var(--ink-900)]">
+            BitBingo
+          </h1>
+          <p className="mt-3 text-sm md:text-base text-[var(--ink-700)] max-w-2xl mx-auto">
+            Claim tiles, submit proof, and race up the board. Every completion redraws
+            the map in real-time.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <Link href="/coordinator" className="quest-button px-5 py-2.5">
+              Open Coordinator
+            </Link>
+            <a href="#arena" className="quest-button px-5 py-2.5">
+              Enter Arena
+            </a>
+          </div>
         </div>
       </header>
 
-      <hr className="border-stone-400 border-dashed mb-8" />
-
       {!isConfigured && (
-        <div className="mb-6 border border-amber-600 bg-amber-100 text-amber-800 px-4 py-3 rounded-sm text-sm text-center">
-          ⚠ Supabase is not configured — showing demo data. Copy{" "}
-          <code className="font-mono">.env.local.example</code> to{" "}
-          <code className="font-mono">.env.local</code> and add your credentials
-          to enable live data and real-time updates.
+        <div className="quest-panel mb-6 px-4 py-3 text-sm text-center text-[var(--ink-700)]">
+          Supabase is not configured. Demo mode is active until you set .env.local.
         </div>
       )}
 
-      {/* ── Two-column layout ───────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
-        {/* Left: Leaderboard */}
+      <section id="arena" className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-start">
         <Leaderboard initialParticipants={participants} />
-
-        {/* Right: Bingo grid */}
         <BingoGrid challenges={challenges} initialCompletions={completions} />
-      </div>
+      </section>
 
-      {/* ── Footer ──────────────────────────────────────────── */}
-      <footer className="mt-12 text-center text-xs text-stone-400 italic">
-        BitBingo · Explorer&apos;s Chart Edition · Powered by Supabase &amp;
-        Next.js
+      <footer className="mt-12 text-center text-xs uppercase tracking-[0.2em] text-[var(--ink-500)]">
+        BitBingo Quest Arena  Real-time by Supabase + Next.js
       </footer>
     </main>
   );

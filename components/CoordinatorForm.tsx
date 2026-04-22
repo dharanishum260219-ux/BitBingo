@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useRef, FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
-import type { Participant, Challenge } from "@/types";
+import { FormEvent, useRef, useState } from "react";
+import type { Challenge, Participant } from "@/types";
 
 interface CoordinatorFormProps {
   participants: Participant[];
@@ -36,207 +35,149 @@ export default function CoordinatorForm({
     setErrorMsg("");
 
     if (!participantId || !challengeId) {
-      setErrorMsg("Please select a participant and a challenge.");
+      setErrorMsg("Select both a crew and a challenge.");
       return;
     }
 
     const file = fileRef.current?.files?.[0];
-    let proofUrl: string | null = null;
 
     try {
-      // ── Upload proof image (if provided) ──────────────────────
+      setStatus(file ? "uploading" : "saving");
+      const formData = new FormData();
+      formData.append("participantId", participantId);
+      formData.append("challengeId", challengeId);
+      formData.append("sessionId", sessionId);
+
       if (file) {
-        setStatus("uploading");
-        const ext = file.name.split(".").pop() ?? "jpg";
-        const path = `${sessionId}/${participantId}-${challengeId}-${Date.now()}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("proofs")
-          .upload(path, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from("proofs")
-          .getPublicUrl(path);
-
-        proofUrl = urlData.publicUrl;
+        formData.append("proof", file);
       }
 
-      // ── Insert completion record ───────────────────────────────
-      setStatus("saving");
-      const { error: insertError } = await supabase
-        .from("completions")
-        .insert({
-          participant_id: participantId,
-          challenge_id: parseInt(challengeId, 10),
-          session_id: sessionId,
-          proof_url: proofUrl,
-        });
-
-      if (insertError) throw insertError;
-
-      // ── Update participant score (atomic increment via RPC) ──
-      await supabase.rpc("increment_participant_score", {
-        p_id: participantId,
+      const response = await fetch("/api/completions", {
+        method: "POST",
+        body: formData,
       });
+
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        message?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message ?? "Unexpected error.");
+      }
 
       setStatus("success");
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred. Please try again.";
+      const msg = err instanceof Error ? err.message : "Unexpected error.";
       setErrorMsg(msg);
       setStatus("error");
     }
   };
 
   const selectedParticipant = participants.find((p) => p.id === participantId);
-  const selectedChallenge = challenges.find(
-    (c) => c.id === parseInt(challengeId, 10)
-  );
+  const selectedChallenge = challenges.find((c) => c.id === parseInt(challengeId, 10));
 
   return (
-    <div className="border-double border-4 border-stone-600 bg-amber-50/80 p-6 rounded-sm shadow-lg max-w-lg mx-auto">
-      {/* Header */}
-      <h1 className="text-center text-3xl font-bold text-stone-900 tracking-wide uppercase mb-1">
-        📜 Captain&apos;s Log
-      </h1>
-      <p className="text-center text-sm italic text-stone-600 mb-5">
-        Log a completed challenge
-      </p>
-      <hr className="border-stone-400 border-dashed mb-6" />
+    <div className="quest-panel p-6 max-w-xl mx-auto">
+      <div className="quest-inset p-5">
+        <h1 className="text-center text-4xl leading-none text-[var(--ink-900)]">Control Deck</h1>
+        <p className="text-center text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-1 mb-5">
+          Log challenge completions
+        </p>
 
-      {status === "success" ? (
-        /* ── Success state ─────────────────────────────────────── */
-        <div className="text-center space-y-4">
-          <div className="text-5xl">⚓</div>
-          <p className="text-xl font-bold text-stone-800">
-            Completion Logged!
-          </p>
-          {selectedParticipant && selectedChallenge && (
-            <p className="text-stone-600 italic text-sm">
-              <span className="font-cursive text-lg text-stone-800">
-                {selectedParticipant.name}
-              </span>{" "}
-              completed{" "}
-              <strong>&ldquo;{selectedChallenge.title}&rdquo;</strong>
-            </p>
-          )}
-          <button
-            onClick={reset}
-            className="mt-4 px-6 py-2 bg-red-700 text-amber-50 font-bold uppercase tracking-wide rounded-sm hover:bg-red-800 transition-colors"
-          >
-            Log Another
-          </button>
-        </div>
-      ) : (
-        /* ── Form ─────────────────────────────────────────────── */
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Participant dropdown */}
-          <div className="space-y-1">
-            <label
-              htmlFor="participant"
-              className="block text-sm font-semibold text-stone-700 uppercase tracking-wider"
-            >
-              Adventurer
-            </label>
-            <select
-              id="participant"
-              value={participantId}
-              onChange={(e) => setParticipantId(e.target.value)}
-              required
-              className="w-full border-2 border-stone-500 bg-orange-50 text-stone-800 px-3 py-2 rounded-sm focus:outline-none focus:ring-2 focus:ring-red-600"
-            >
-              <option value="">— Select adventurer —</option>
-              {participants.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Challenge dropdown */}
-          <div className="space-y-1">
-            <label
-              htmlFor="challenge"
-              className="block text-sm font-semibold text-stone-700 uppercase tracking-wider"
-            >
-              Challenge
-            </label>
-            <select
-              id="challenge"
-              value={challengeId}
-              onChange={(e) => setChallengeId(e.target.value)}
-              required
-              className="w-full border-2 border-stone-500 bg-orange-50 text-stone-800 px-3 py-2 rounded-sm focus:outline-none focus:ring-2 focus:ring-red-600"
-            >
-              <option value="">— Select challenge —</option>
-              {challenges.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.position === 12 ? "⭐ " : ""}
-                  {c.title}
-                </option>
-              ))}
-            </select>
-            {selectedChallenge && (
-              <p className="text-xs italic text-stone-500 mt-1">
-                {selectedChallenge.description}
+        {status === "success" ? (
+          <div className="text-center space-y-3 py-2">
+            <p className="text-3xl font-semibold text-[var(--accent-a)]">Record Saved</p>
+            {selectedParticipant && selectedChallenge && (
+              <p className="text-[var(--ink-700)] text-sm">
+                <span className="font-cursive text-xl text-[var(--ink-900)]">{selectedParticipant.name}</span>{" "}
+                cleared <strong>{selectedChallenge.title}</strong>
               </p>
             )}
+            <button onClick={reset} className="quest-button mt-2 px-6 py-2.5">
+              Log Another
+            </button>
           </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="participant" className="text-xs uppercase tracking-[0.14em] font-semibold text-[var(--ink-700)]">
+                Crew
+              </label>
+              <select
+                id="participant"
+                value={participantId}
+                onChange={(e) => setParticipantId(e.target.value)}
+                required
+                className="w-full rounded-xl border-2 border-[var(--edge-soft)] bg-white/80 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[var(--accent-a)]"
+              >
+                <option value="">Select crew</option>
+                {participants.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Proof image (camera) */}
-          <div className="space-y-1">
-            <label
-              htmlFor="proof"
-              className="block text-sm font-semibold text-stone-700 uppercase tracking-wider"
+            <div className="space-y-1.5">
+              <label htmlFor="challenge" className="text-xs uppercase tracking-[0.14em] font-semibold text-[var(--ink-700)]">
+                Challenge
+              </label>
+              <select
+                id="challenge"
+                value={challengeId}
+                onChange={(e) => setChallengeId(e.target.value)}
+                required
+                className="w-full rounded-xl border-2 border-[var(--edge-soft)] bg-white/80 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[var(--accent-a)]"
+              >
+                <option value="">Select challenge</option>
+                {challenges.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.position === 12 ? "Core - " : ""}
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+              {selectedChallenge && (
+                <p className="text-xs text-[var(--ink-500)]">{selectedChallenge.description}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="proof" className="text-xs uppercase tracking-[0.14em] font-semibold text-[var(--ink-700)]">
+                Proof Capture
+              </label>
+              <input
+                id="proof"
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="w-full rounded-xl border-2 border-[var(--edge-soft)] bg-white/80 px-3 py-2 text-sm"
+              />
+            </div>
+
+            {errorMsg && (
+              <p className="rounded-xl border border-[var(--accent-b)]/40 bg-[var(--accent-b)]/10 px-3 py-2 text-sm text-[var(--accent-b)]">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === "uploading" || status === "saving"}
+              className="quest-button w-full py-3"
             >
-              Proof (Photo)
-            </label>
-            <input
-              id="proof"
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="w-full text-sm text-stone-700
-                file:mr-3 file:py-1.5 file:px-4
-                file:border file:border-stone-800
-                file:bg-stone-200 file:text-stone-800
-                file:rounded-sm file:cursor-pointer
-                file:font-semibold file:uppercase file:tracking-wide
-                hover:file:bg-stone-300 transition-colors"
-            />
-            <p className="text-xs text-stone-400 italic">
-              Takes a photo of the participant&apos;s screen as evidence.
-            </p>
-          </div>
-
-          {/* Error message */}
-          {errorMsg && (
-            <p className="text-red-700 text-sm font-medium border border-red-300 bg-red-50 px-3 py-2 rounded-sm">
-              ⚠ {errorMsg}
-            </p>
-          )}
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={status === "uploading" || status === "saving"}
-            className="w-full py-3 bg-red-700 text-amber-50 font-bold uppercase tracking-widest rounded-sm
-              hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
-          >
-            {status === "uploading"
-              ? "⏫ Uploading proof…"
-              : status === "saving"
-              ? "📝 Saving record…"
-              : "⚓ Log Completion"}
-          </button>
-        </form>
-      )}
+              {status === "uploading"
+                ? "Uploading proof"
+                : status === "saving"
+                ? "Saving record"
+                : "Log Completion"}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

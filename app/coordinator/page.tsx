@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import CoordinatorForm from "@/components/CoordinatorForm";
-import type { Participant, Challenge, Session } from "@/types";
 import Link from "next/link";
+
+import CoordinatorWorkspace from "@/components/CoordinatorWorkspace";
+import type { Challenge, Participant, Session } from "@/types";
 
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -21,12 +22,11 @@ export default async function CoordinatorPage() {
   const isConfigured = !!db;
 
   if (db) {
-    const [participantsResult, challengesResult, sessionsResult] =
-      await Promise.all([
-        db.from("participants").select("*").order("name"),
-        db.from("challenges").select("*").order("position"),
-        db.from("sessions").select("*").eq("is_active", true).limit(1),
-      ]);
+    const [participantsResult, challengesResult, sessionsResult] = await Promise.all([
+      db.from("participants").select("*").order("name"),
+      db.from("challenges").select("*").order("position"),
+      db.from("sessions").select("*").eq("is_active", true).limit(1),
+    ]);
 
     participants = participantsResult.data ?? [];
     challenges = challengesResult.data ?? [];
@@ -35,50 +35,31 @@ export default async function CoordinatorPage() {
   }
 
   return (
-    <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
-      {/* Back link */}
-      <div className="mb-6">
-        <Link
-          href="/"
-          className="text-sm text-stone-500 hover:text-red-700 italic transition-colors"
-        >
-          ← Back to the Map
+    <main className="page-enter flex-1 w-full max-w-3xl mx-auto px-4 py-8 md:py-10">
+      <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
+        <Link href="/" className="quest-button px-4 py-2 text-xs">
+          Back to Arena
         </Link>
       </div>
 
       {!isConfigured ? (
-        <div className="border-double border-4 border-stone-600 bg-amber-50/80 p-8 rounded-sm text-center shadow-lg">
-          <p className="text-2xl mb-2">⚠</p>
-          <p className="text-xl font-bold text-stone-800 mb-2">
-            Supabase Not Configured
-          </p>
-          <p className="text-stone-600 italic text-sm">
-            Copy <code className="font-mono">.env.local.example</code> to{" "}
-            <code className="font-mono">.env.local</code> and add your Supabase
-            credentials to enable this feature.
+        <div className="quest-panel p-8 text-center">
+          <p className="text-3xl text-[var(--accent-b)]">Setup Required</p>
+          <p className="text-[var(--ink-700)] mt-2">
+            Configure Supabase credentials in .env.local to use coordinator tools.
           </p>
         </div>
       ) : activeSession ? (
-        <>
-          <p className="text-center text-xs text-stone-500 italic mb-6">
-            Active session:{" "}
-            <strong className="text-stone-700">{activeSession.name}</strong>
-          </p>
-          <CoordinatorForm
-            participants={participants}
-            challenges={challenges}
-            sessionId={activeSession.id}
-          />
-        </>
+        <CoordinatorWorkspace
+          initialParticipants={participants}
+          challenges={challenges}
+          activeSession={activeSession}
+        />
       ) : (
-        <div className="border-double border-4 border-stone-600 bg-amber-50/80 p-8 rounded-sm text-center shadow-lg">
-          <p className="text-2xl mb-2">⚓</p>
-          <p className="text-xl font-bold text-stone-800 mb-2">
-            No Active Session
-          </p>
-          <p className="text-stone-600 italic text-sm">
-            A coordinator must create and activate a session in Supabase before
-            completions can be logged.
+        <div className="quest-panel p-8 text-center">
+          <p className="text-3xl text-[var(--accent-b)]">No Active Session</p>
+          <p className="text-[var(--ink-700)] mt-2">
+            Create and activate a session from the admin console before logging runs.
           </p>
         </div>
       )}

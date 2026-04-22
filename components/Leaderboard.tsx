@@ -9,16 +9,13 @@ interface LeaderboardProps {
 }
 
 export default function Leaderboard({ initialParticipants }: LeaderboardProps) {
+  const sorted = (list: Participant[]) =>
+    [...list].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+
   const [participants, setParticipants] =
-    useState<Participant[]>(initialParticipants);
+    useState<Participant[]>(() => sorted(initialParticipants));
 
   useEffect(() => {
-    // Sort helper – highest score first, then by name
-    const sorted = (list: Participant[]) =>
-      [...list].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-
-    setParticipants(sorted(initialParticipants));
-
     const channel = supabase
       .channel("participants-leaderboard")
       .on(
@@ -49,49 +46,46 @@ export default function Leaderboard({ initialParticipants }: LeaderboardProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [initialParticipants]);
+  }, []);
 
-  const medals = ["🥇", "🥈", "🥉"];
+  const medals = ["#1", "#2", "#3"];
 
   return (
-    <aside className="border-double border-4 border-stone-600 bg-amber-50/80 p-5 rounded-sm shadow-lg">
-      {/* Header */}
-      <h2 className="text-center text-2xl font-bold text-stone-900 tracking-wide uppercase mb-1">
-        ⚓ Bounty Board
-      </h2>
-      <p className="text-center text-sm italic text-stone-600 mb-4">
-        Top Adventurers
-      </p>
-      <hr className="border-stone-400 border-dashed mb-4" />
-
-      {participants.length === 0 ? (
-        <p className="text-center text-stone-500 italic text-sm py-4">
-          No adventurers have registered yet…
+    <aside className="quest-panel p-5 md:p-6">
+      <div className="quest-inset px-3 py-4 md:px-4 md:py-5">
+        <h2 className="text-center text-3xl text-[var(--ink-900)]">Bounty Board</h2>
+        <p className="text-center text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mt-1 mb-4">
+          Top Crews in the Arena
         </p>
-      ) : (
-        <ol className="space-y-2">
-          {participants.map((p, idx) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-2 py-2 px-3 border border-stone-300 bg-orange-50/60 rounded-sm"
-            >
-              <span className="text-lg w-6 shrink-0">
-                {medals[idx] ?? `${idx + 1}.`}
-              </span>
-              {/* Cursive handwritten font for participant name */}
-              <span className="font-cursive text-xl text-stone-800 flex-1 truncate">
-                {p.name}
-              </span>
-              <span className="text-red-700 font-bold tabular-nums text-sm">
-                {p.score} pts
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
 
-      <p className="mt-4 text-center text-xs text-stone-400 italic">
-        ✦ Updates in real-time ✦
+        {participants.length === 0 ? (
+          <p className="text-center text-[var(--ink-500)] italic text-sm py-5">
+            Waiting for the first crew to join the run.
+          </p>
+        ) : (
+          <ol className="space-y-2">
+            {participants.map((p, idx) => (
+              <li
+                key={p.id}
+                className="quest-inset px-3 py-2.5 flex items-center gap-3 transition-transform duration-200 hover:-translate-y-0.5"
+              >
+                <span className="w-9 h-9 shrink-0 rounded-full border-2 border-[var(--edge)] bg-[var(--accent-c)]/65 flex items-center justify-center text-xs font-bold text-[var(--ink-900)]">
+                  {medals[idx] ?? idx + 1}
+                </span>
+                <span className="font-cursive text-xl text-[var(--ink-900)] flex-1 truncate">
+                  {p.name}
+                </span>
+                <span className="text-[var(--accent-b)] font-bold tabular-nums text-sm">
+                  {p.score} pts
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <p className="mt-4 text-center text-xs uppercase tracking-[0.14em] text-[var(--ink-500)]">
+        Auto-sync enabled
       </p>
     </aside>
   );

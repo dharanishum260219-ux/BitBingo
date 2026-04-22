@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CompletionModal from "@/components/CompletionModal";
 import { supabase } from "@/lib/supabase";
-import type { Challenge, Completion } from "@/types";
+import type { Challenge, Completion, Participant } from "@/types";
 
 interface BingoGridProps {
   challenges: Challenge[];
   initialCompletions: Completion[];
 }
+
+type CompletionWithDetails = Completion & {
+  participant?: Participant;
+  challenge?: Challenge;
+};
 
 export default function BingoGrid({
   challenges,
@@ -16,6 +22,11 @@ export default function BingoGrid({
   const [completedIds, setCompletedIds] = useState<Set<number>>(
     () => new Set(initialCompletions.map((c) => c.challenge_id))
   );
+  const [completions, setCompletions] = useState<Map<string, Completion>>(
+    () => new Map(initialCompletions.map((c) => [c.id, c]))
+  );
+  const [selectedCompletion, setSelectedCompletion] =
+    useState<CompletionWithDetails | null>(null);
 
   useEffect(() => {
     const channel = supabase
@@ -27,11 +38,17 @@ export default function BingoGrid({
           if (payload.eventType === "INSERT") {
             const newComp = payload.new as Completion;
             setCompletedIds((prev) => new Set([...prev, newComp.challenge_id]));
+            setCompletions((prev) => new Map(prev).set(newComp.id, newComp));
           } else if (payload.eventType === "DELETE") {
             const oldComp = payload.old as Completion;
             setCompletedIds((prev) => {
               const next = new Set(prev);
               next.delete(oldComp.challenge_id);
+              return next;
+            });
+            setCompletions((prev) => {
+              const next = new Map(prev);
+              next.delete(oldComp.id);
               return next;
             });
           }
@@ -44,72 +61,89 @@ export default function BingoGrid({
     };
   }, []);
 
-  // Build a position-indexed map for quick lookup
-  const challengeByPosition = new Map(
-    challenges.map((c) => [c.position, c])
+  const fetchCompletionDetails = async (completionId: string) => {
+    try {
+      const response = await fetch(`/api/completions/${completionId}`);
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        data?: CompletionWithDetails;
+      };
+
+      if (response.ok && payload.data) {
+        setSelectedCompletion(payload.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch completion details:", error);
+    }
+  };
+
+  const challengeByPosition = new Map(challenges.map((c) => [c.position, c]));
+  const completionIdByChallenge = new Map(
+    Array.from(completions.values()).map((c) => [c.challenge_id, c.id])
   );
 
   return (
-    <section>
-      <h2 className="text-center text-2xl font-bold text-stone-900 tracking-wide uppercase mb-1">
-        🗺 Treasure Map
-      </h2>
-      <p className="text-center text-sm italic text-stone-600 mb-4">
-        Complete challenges to chart the territory
-      </p>
+    <section className="quest-panel p-4 md:p-6">
+      <div className="quest-inset px-3 py-4 md:px-5 md:py-5">
+        <h2 className="text-center text-3xl text-[var(--ink-900)]">Quest Grid</h2>
+        <p className="text-center text-xs uppercase tracking-[0.18em] text-[var(--ink-500)] mb-4">
+          Click cleared tiles to inspect submissions
+        </p>
 
-      <div className="border-double border-4 border-stone-600 p-2 bg-amber-50/80 shadow-lg rounded-sm">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-5 gap-1.5 md:gap-2">
           {Array.from({ length: 25 }, (_, pos) => {
             const challenge = challengeByPosition.get(pos);
             if (!challenge) return null;
 
             const isCompleted = completedIds.has(challenge.id);
             const isCenter = pos === 12;
+            const completionId = isCompleted
+              ? completionIdByChallenge.get(challenge.id)
+              : undefined;
 
             return (
-              <div
+              <button
                 key={pos}
+                type="button"
                 title={challenge.description}
+                onClick={() => {
+                  if (isCompleted && completionId) {
+                    fetchCompletionDetails(completionId);
+                  }
+                }}
                 className={[
-                  "relative flex flex-col items-center justify-center",
-                  "border-double border-4 min-h-[80px] sm:min-h-[96px] p-1 text-center",
-                  "transition-all duration-300 rounded-sm overflow-hidden",
+                  "relative min-h-[82px] sm:min-h-[98px] p-1.5 text-center rounded-xl border-2 transition-all duration-200",
+                  "flex flex-col items-center justify-center overflow-hidden",
                   isCompleted
-                    ? "border-red-700 bg-orange-100"
+                    ? "border-[var(--accent-b)] bg-[var(--accent-b)]/12 cursor-pointer hover:bg-[var(--accent-b)]/20 hover:-translate-y-0.5"
                     : isCenter
-                    ? "border-stone-700 bg-amber-100 ring-2 ring-offset-1 ring-stone-500"
-                    : "border-stone-400 bg-amber-50",
+                    ? "border-[var(--accent-a)] bg-[var(--accent-a)]/12"
+                    : "border-[var(--edge-soft)] bg-white/55",
                 ].join(" ")}
               >
-                {/* Challenge text (always visible) */}
                 <span
                   className={[
                     "text-[10px] sm:text-xs leading-tight font-semibold",
-                    isCompleted ? "text-stone-600 opacity-60" : "text-stone-800",
-                    isCenter ? "text-cyan-800" : "",
+                    isCompleted
+                      ? "text-[var(--ink-700)] opacity-65"
+                      : "text-[var(--ink-900)]",
                   ].join(" ")}
                 >
                   {challenge.title}
                 </span>
 
-                {/* Completed overlay – bold red X like a map marker */}
                 {isCompleted && (
                   <span
                     aria-label="Completed"
                     className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
                   >
-                    <svg
-                      viewBox="0 0 40 40"
-                      className="w-10 h-10 opacity-90"
-                      aria-hidden="true"
-                    >
+                    <svg viewBox="0 0 40 40" className="w-10 h-10 opacity-90" aria-hidden="true">
                       <line
                         x1="4"
                         y1="4"
                         x2="36"
                         y2="36"
-                        stroke="#b91c1c"
+                        stroke="#c44536"
                         strokeWidth="6"
                         strokeLinecap="round"
                       />
@@ -118,7 +152,7 @@ export default function BingoGrid({
                         y1="4"
                         x2="4"
                         y2="36"
-                        stroke="#b91c1c"
+                        stroke="#c44536"
                         strokeWidth="6"
                         strokeLinecap="round"
                       />
@@ -126,21 +160,22 @@ export default function BingoGrid({
                   </span>
                 )}
 
-                {/* Center tile crown icon */}
                 {isCenter && !isCompleted && (
-                  <span className="mt-1 text-base" aria-hidden="true">
-                    ✦
+                  <span className="mt-1 text-base text-[var(--accent-a)]" aria-hidden="true">
+                    CORE
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      <p className="mt-2 text-center text-xs text-stone-400 italic">
-        ✦ Grid updates in real-time ✦
-      </p>
+      <CompletionModal
+        isOpen={selectedCompletion !== null}
+        completion={selectedCompletion}
+        onClose={() => setSelectedCompletion(null)}
+      />
     </section>
   );
 }
