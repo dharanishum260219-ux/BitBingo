@@ -215,9 +215,9 @@ function ActiveRosterPanel() {
         )}
         <div className="flex flex-col divide-y divide-dashed divide-stone-400">
           {teams.map((team) => (
-            <div key={team.id} className="flex items-center justify-between py-3 px-2">
-              <span className="font-cursive text-xl text-stone-800">{team.name}</span>
-              <div className="flex items-center gap-3 ml-auto">
+            <div key={team.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2">
+              <span className="font-cursive text-lg md:text-xl text-stone-800">{team.name}</span>
+              <div className="flex items-center gap-3 sm:ml-auto">
                 <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
                   {team.score} PTS
                 </span>
@@ -248,9 +248,9 @@ function SessionHistoryPanel() {
         )}
         <div className="flex flex-col divide-y divide-dashed divide-stone-400">
           {sessions.map((session) => (
-            <div key={session.id} className="flex items-center justify-between py-3 px-2">
-              <span className="font-cursive text-xl text-stone-800">{session.name}</span>
-              <div className="flex items-center gap-4 ml-auto">
+            <div key={session.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2">
+              <span className="font-cursive text-lg md:text-xl text-stone-800">{session.name}</span>
+              <div className="flex items-center gap-4 sm:ml-auto">
                 <span
                   className={`text-[10px] uppercase tracking-widest font-serif font-bold ${
                     session.status === "Active" ? "text-emerald-600" : "text-stone-500"
@@ -278,13 +278,13 @@ function MissionControlCard() {
     <Card className="mb-8">
       <CardHeader icon={<Shield className="w-6 h-6" />} title="Mission Control" color="amber" />
       <div className="p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-widest font-serif text-stone-600">
               Session and Roster Management
             </p>
           </div>
-          <Btn variant="default">
+          <Btn variant="default" className="w-full sm:w-auto">
             <LogOut className="w-4 h-4" />
             SIGN OUT
           </Btn>
@@ -298,22 +298,23 @@ export default function AdminPage() {
   return (
     <FantasyBackground>
       <header className="sticky top-0 z-40 bg-stone-800 border-b-4 border-stone-900 shadow-[0_4px_0_rgba(0,0,0,0.3)]">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-3 md:px-4 py-3 md:py-4 flex flex-wrap items-center justify-between gap-2 md:gap-3">
           <Link href="/">
             <button
               type="button"
-              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white font-serif font-bold border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-amber-600 text-white font-serif font-bold text-xs md:text-base border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
             >
               <ArrowLeft className="w-5 h-5" />
-              Back to Arena
+              <span className="hidden sm:inline">Back to Arena</span>
+              <span className="sm:hidden">Back</span>
             </button>
           </Link>
 
-          <div className="flex-1 text-center">
+          <div className="order-3 w-full md:order-none md:w-auto md:flex-1 text-center">
             <p className="text-[10px] uppercase tracking-widest font-serif text-stone-400">
               Restricted Console
             </p>
-            <h1 className="font-cursive text-3xl md:text-4xl font-bold text-amber-100 tracking-wide">
+            <h1 className="font-cursive text-2xl md:text-4xl font-bold text-amber-100 tracking-wide">
               Mission Control
             </h1>
           </div>
@@ -321,16 +322,17 @@ export default function AdminPage() {
           <Link href="/coordinator">
             <button
               type="button"
-              className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white font-serif font-bold border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-teal-600 text-white font-serif font-bold text-xs md:text-base border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
             >
               <Play className="w-5 h-5" />
-              Open Coordinator
+              <span className="hidden sm:inline">Open Coordinator</span>
+              <span className="sm:hidden">Coordinator</span>
             </button>
           </Link>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 pb-24 space-y-6">
+      <main className="max-w-5xl mx-auto px-2 sm:px-3 md:px-4 py-5 md:py-8 pb-10 md:pb-12 space-y-5 md:space-y-6">
         <MissionControlCard />
 
         <div className="grid md:grid-cols-2 gap-6">
@@ -346,12 +348,12 @@ export default function AdminPage() {
         <SessionHistoryPanel />
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-center gap-2">
+      <footer className="mt-8 min-h-16 bg-stone-800 border-t-4 border-stone-900 py-2 px-3 md:px-4">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center leading-tight">
           <Gem className="w-4 h-4 text-teal-400" />
-          <span className="font-serif text-xs text-stone-400 uppercase tracking-widest">BitBingo Admin System</span>
+          <span className="font-serif text-[10px] md:text-xs text-stone-400 uppercase tracking-wide md:tracking-widest">BitBingo Admin System</span>
           <span className="text-stone-600">•</span>
-          <span className="font-serif text-xs text-stone-500">v1.0.0</span>
+          <span className="font-serif text-[10px] md:text-xs text-stone-500">v1.0.0</span>
         </div>
       </footer>
     </FantasyBackground>

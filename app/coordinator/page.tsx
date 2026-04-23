@@ -34,7 +34,7 @@ function Btn({
     gold:
       "border-[#7a6130] bg-gradient-to-b from-[#d4a930] to-[#b8860b] text-white shadow-[0_3px_0_#5c4000] hover:shadow-[0_4px_0_#5c4000] w-full text-center uppercase tracking-wider text-sm",
     stamp:
-      "border-stone-900 bg-red-600 text-white shadow-[4px_4px_0_rgba(0,0,0,0.7)] hover:shadow-[6px_6px_0_rgba(0,0,0,0.8)] text-xl tracking-wider px-8 py-4 border-4",
+      "border-stone-900 bg-red-600 text-white shadow-[4px_4px_0_rgba(0,0,0,0.7)] hover:shadow-[6px_6px_0_rgba(0,0,0,0.8)] text-base md:text-xl tracking-wider px-5 py-3 md:px-8 md:py-4 border-4 w-full sm:w-auto",
   }
 
   return (
@@ -123,7 +123,7 @@ function CompletionPopup({ details, onClose }: { details: CompletionDetails | nu
   if (!details) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
       <button
         type="button"
         aria-label="Close completion popup"
@@ -132,13 +132,13 @@ function CompletionPopup({ details, onClose }: { details: CompletionDetails | nu
       />
 
       <div className="relative w-full max-w-xl bg-amber-100 border-4 border-stone-900 rounded-xl shadow-[8px_8px_0_rgba(0,0,0,1)] overflow-hidden">
-        <div className="bg-stone-800 px-5 py-4 flex items-center gap-3">
+        <div className="bg-stone-800 px-3 sm:px-5 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
           <Stamp className="w-6 h-6 text-amber-400" />
-          <h3 className="font-sans text-xl font-bold text-amber-100 tracking-wide">Challenge Completed</h3>
+          <h3 className="font-sans text-base sm:text-xl font-bold text-amber-100 tracking-wide">Challenge Completed</h3>
         </div>
         <div className="h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Team</p>
@@ -165,7 +165,7 @@ function CompletionPopup({ details, onClose }: { details: CompletionDetails | nu
             </p>
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-xs font-sans uppercase tracking-wider text-stone-600">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs font-sans uppercase tracking-wider text-stone-600">
             <span>Stamped at {details.stampedAt}</span>
             <span className="text-emerald-700 font-bold">Successfully Logged</span>
           </div>
@@ -185,7 +185,7 @@ function SessionSummaryPanel() {
   return (
     <Card className="mb-8">
       <CardHeader icon={<Zap className="w-6 h-6" />} title="Active Session Summary" color="emerald" />
-      <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
           <p className="font-sans text-lg font-bold text-stone-900">
@@ -253,7 +253,7 @@ function ControlDeckPanel() {
     <>
       <Card>
         <CardHeader icon={<Scroll className="w-6 h-6" />} title="Control Deck: Log Completions" color="teal" />
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <FormLabel>Select Team</FormLabel>
@@ -267,7 +267,7 @@ function ControlDeckPanel() {
 
           <div>
             <FormLabel>Proof of Completion</FormLabel>
-            <div className="bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
+            <div className="bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-4 sm:p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-12 h-12 bg-orange-200 border-2 border-stone-800 rounded-lg flex items-center justify-center">
                   <Upload className="w-6 h-6 text-stone-700" />
@@ -308,36 +308,37 @@ export default function CoordinatorDeck() {
   return (
     <FantasyBackground>
       <header className="sticky top-0 z-40 bg-stone-800 border-b-4 border-stone-900 shadow-[0_4px_0_rgba(0,0,0,0.3)]">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-3 md:px-4 py-3 md:py-4 flex flex-wrap items-center justify-between gap-2 md:gap-3">
           <Link href="/">
             <button
               type="button"
-              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white font-sans font-bold border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-amber-600 text-white font-sans font-bold text-xs md:text-base border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
             >
               <ArrowLeft className="w-5 h-5" />
-              Back to Arena
+              <span className="hidden sm:inline">Back to Arena</span>
+              <span className="sm:hidden">Back</span>
             </button>
           </Link>
 
-          <h1 className="font-cursive text-3xl md:text-4xl font-bold text-amber-100 tracking-wide">
+          <h1 className="order-3 w-full text-center md:order-none md:w-auto font-cursive text-2xl md:text-4xl font-bold text-amber-100 tracking-wide">
             Coordinator Deck
           </h1>
 
-          <div className="w-28" />
+          <div className="hidden md:block w-28" />
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 pb-24">
+      <main className="max-w-5xl mx-auto px-2 sm:px-3 md:px-4 py-5 md:py-8 pb-10 md:pb-12">
         <SessionSummaryPanel />
         <ControlDeckPanel />
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-center gap-2">
+      <footer className="mt-8 min-h-16 bg-stone-800 border-t-4 border-stone-900 py-2 px-3 md:px-4">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center leading-tight">
           <Gem className="w-4 h-4 text-teal-400" />
-          <span className="font-sans text-xs text-stone-400 uppercase tracking-widest">BitBingo Coordinator System</span>
+          <span className="font-sans text-[10px] md:text-xs text-stone-400 uppercase tracking-wide md:tracking-widest">BitBingo Coordinator System</span>
           <span className="text-stone-600">•</span>
-          <span className="font-sans text-xs text-stone-500">v1.0.0</span>
+          <span className="font-sans text-[10px] md:text-xs text-stone-500">v1.0.0</span>
         </div>
       </footer>
     </FantasyBackground>

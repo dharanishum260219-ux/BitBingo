@@ -103,10 +103,10 @@ const questIcons = [
 
 function QuestChip({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return (
-    <div className="inline-flex items-center gap-2 bg-orange-100 border-2 border-stone-800 rounded-full px-4 py-2 shadow-[2px_2px_0_rgba(0,0,0,1)]">
+    <div className="inline-flex max-w-full items-center gap-2 bg-orange-100 border-2 border-stone-800 rounded-full px-3 md:px-4 py-2 shadow-[2px_2px_0_rgba(0,0,0,1)]">
       <span className="text-orange-600">{icon}</span>
-      <span className="font-serif text-xs uppercase tracking-widest text-stone-600">{label}</span>
-      <span className="font-serif font-bold text-stone-900">{value}</span>
+      <span className="font-serif text-[10px] md:text-xs uppercase tracking-wider md:tracking-widest text-stone-600 whitespace-nowrap">{label}</span>
+      <span className="font-serif font-bold text-sm md:text-base text-stone-900 whitespace-nowrap">{value}</span>
     </div>
   )
 }
@@ -123,7 +123,7 @@ function ActionButton({
   onClick?: () => void
 }) {
   const base =
-    "inline-flex items-center gap-3 px-6 py-4 font-serif font-bold text-lg border-4 border-stone-900 rounded-lg transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,1)] cursor-pointer"
+    "inline-flex w-full sm:w-auto items-center justify-center gap-3 px-4 py-3 md:px-6 md:py-4 font-serif font-bold text-base md:text-lg border-4 border-stone-900 rounded-lg transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,1)] cursor-pointer"
   const variants = {
     primary: "bg-teal-600 text-white shadow-[4px_4px_0_rgba(0,0,0,1)]",
     secondary: "bg-orange-500 text-white shadow-[4px_4px_0_rgba(0,0,0,1)]",
@@ -190,7 +190,7 @@ function BountyBoard() {
             <RankMedal rank={team.rank} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <span className="font-cursive text-xl text-stone-800 truncate">{team.name}</span>
+                <span className="font-cursive text-lg md:text-xl text-stone-800 truncate">{team.name}</span>
                 <span className="font-serif text-xs uppercase tracking-wider text-stone-500 ml-2 whitespace-nowrap">
                   {team.score} pts
                 </span>
@@ -258,14 +258,14 @@ function QuestGrid({ tiles, onTileClick }: { tiles: BoardTile[]; onTileClick: (i
         <h2 className="font-serif text-xl font-bold text-amber-100 tracking-wide">Quest Grid</h2>
       </div>
       <div className="h-2 bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
-      <div className="p-4">
-        <div className="grid grid-cols-5 gap-2">
+      <div className="overflow-x-auto p-3 md:p-4">
+        <div className="grid min-w-[520px] sm:min-w-[560px] grid-cols-5 gap-2 md:min-w-0">
           {tiles.map((tile) => (
             <BingoTileComponent key={tile.id} tile={tile} onClick={() => onTileClick(tile.id)} />
           ))}
         </div>
       </div>
-      <div className="border-t-2 border-stone-400 bg-amber-200/50 px-4 py-2 flex items-center justify-between">
+      <div className="border-t-2 border-stone-400 bg-amber-200/50 px-3 md:px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         <p className="font-serif text-xs text-stone-600 uppercase tracking-widest">
           {tiles.filter((t) => t.completed).length} / 25 Completed
         </p>
@@ -340,75 +340,119 @@ export default function HomeArena() {
 
   return (
     <FantasyBackground>
-      <Link href="/admin">
-        <button
-          className="fixed top-4 right-4 z-50 w-14 h-14 bg-gradient-to-br from-amber-600 to-orange-700 border-4 border-stone-900 rounded-full flex items-center justify-center shadow-[3px_3px_0_rgba(0,0,0,1)] hover:shadow-[4px_4px_0_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
-          aria-label="Admin Panel"
-        >
-          <Settings className="w-7 h-7 text-amber-100" />
-        </button>
-      </Link>
+      {!isFullscreen && (
+        <Link href="/admin">
+          <button
+            className="fixed top-3 right-3 md:top-4 md:right-4 z-50 w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-amber-600 to-orange-700 border-4 border-stone-900 rounded-full flex items-center justify-center shadow-[3px_3px_0_rgba(0,0,0,1)] hover:shadow-[4px_4px_0_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
+            aria-label="Admin Panel"
+          >
+            <Settings className="w-6 h-6 md:w-7 md:h-7 text-amber-100" />
+          </button>
+        </Link>
+      )}
 
-      <main className="max-w-7xl mx-auto px-4 py-8 pb-20">
-        <section className="text-center mb-10">
-          <div className="relative inline-block mb-6">
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-bold text-stone-900 tracking-tight">
-              Live Quest Arena
-            </h1>
-            <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-teal-600 to-transparent" />
-          </div>
+      {!isFullscreen ? (
+        <>
+          <main className="max-w-7xl mx-auto px-3 md:px-4 py-6 md:py-8 pb-10 md:pb-12">
+            <section className="text-center mb-8 md:mb-10">
+              <div className="relative inline-block mb-6">
+                <h1 className="font-serif text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-stone-900 tracking-tight">
+                  Live Quest Arena
+                </h1>
+                <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-teal-600 to-transparent" />
+              </div>
 
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
-            <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
-            <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
-            <QuestChip label="Time" value={activeSession ? "2:45:30" : "Awaiting"} icon={<Clock className="w-4 h-4" />} />
-          </div>
+              <div className="flex flex-wrap justify-center gap-3 mb-8">
+                <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
+                <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
+                <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
+                <QuestChip label="Time" value={activeSession ? "2:45:30" : "Awaiting"} icon={<Clock className="w-4 h-4" />} />
+              </div>
 
-          <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/coordinator">
-              <ActionButton variant="primary" icon={<Play className="w-5 h-5" />}>
-                Launch Coordinator
-              </ActionButton>
-            </Link>
-            <ActionButton
-              variant="secondary"
-              icon={isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-              onClick={handleFullscreenToggle}
-            >
-              {isFullscreen ? "Exit Fullscreen Arena" : "Enter Fullscreen Arena"}
-            </ActionButton>
-          </div>
-        </section>
+              <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 md:gap-4">
+                <Link href="/coordinator">
+                  <ActionButton variant="primary" icon={<Play className="w-5 h-5" />}>
+                    Launch Coordinator
+                  </ActionButton>
+                </Link>
+                <ActionButton
+                  variant="secondary"
+                  icon={<Maximize2 className="w-5 h-5" />}
+                  onClick={handleFullscreenToggle}
+                >
+                  Enter Fullscreen Arena
+                </ActionButton>
+              </div>
+            </section>
 
-        <section className="grid lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-2">
-            <BountyBoard />
-          </div>
-          <div className="lg:col-span-3">
-            <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
-          </div>
-        </section>
+            <section className="grid lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-2">
+                <BountyBoard />
+              </div>
+              <div className="lg:col-span-3">
+                <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
+              </div>
+            </section>
 
-        {isLoading && (
-          <div className="mt-6 rounded-xl border-2 border-stone-800 bg-amber-50 px-4 py-3 font-serif text-sm text-stone-700 shadow-[3px_3px_0_rgba(0,0,0,1)]">
-            Loading arena data from the database...
-          </div>
-        )}
-      </main>
+            {isLoading && (
+              <div className="mt-6 rounded-xl border-2 border-stone-800 bg-amber-50 px-4 py-3 font-serif text-sm text-stone-700 shadow-[3px_3px_0_rgba(0,0,0,1)]">
+                Loading arena data from the database...
+              </div>
+            )}
+          </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
-          <Gem className="w-4 h-4 text-teal-400" />
-          <span className="font-serif text-xs text-stone-400 uppercase tracking-widest">BitBingo System</span>
-          <span className="text-stone-600">•</span>
-          <span className="font-serif text-xs text-stone-500">v1.0.0</span>
+          <footer className="mt-8 min-h-16 bg-stone-800 border-t-4 border-stone-900 py-2 px-3 md:px-4">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center leading-tight">
+              <Gem className="w-4 h-4 text-teal-400" />
+              <span className="font-serif text-[10px] md:text-xs text-stone-400 uppercase tracking-wide md:tracking-widest">BitBingo System</span>
+              <span className="text-stone-600">•</span>
+              <span className="font-serif text-[10px] md:text-xs text-stone-500">v1.0.0</span>
+            </div>
+          </footer>
+        </>
+      ) : (
+        <div className="fixed inset-0 z-40 bg-[radial-gradient(circle_at_top,_#f8f1dc_0%,_#ead7a3_42%,_#d3b97b_100%)] overflow-y-auto">
+          <div className="mx-auto min-h-full w-full max-w-[1800px] px-3 md:px-6 py-3 md:py-5">
+            <div className="sticky top-3 z-50 mb-4 inline-flex">
+              <button
+                type="button"
+                onClick={handleFullscreenToggle}
+                className="inline-flex items-center gap-2 rounded-lg border-4 border-stone-900 bg-orange-500 px-4 py-2 font-serif text-sm font-bold text-white shadow-[4px_4px_0_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,1)]"
+              >
+                <Minimize2 className="w-4 h-4" />
+                Exit Fullscreen
+              </button>
+            </div>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
+                <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
+                <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
+                <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
+              </div>
+            </div>
+
+            <section className="grid items-start gap-4 md:gap-6 xl:grid-cols-5">
+              <div className="xl:col-span-2 xl:pt-3">
+                <BountyBoard />
+              </div>
+              <div className="xl:col-span-3">
+                <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
+              </div>
+            </section>
+
+            {isLoading && (
+              <div className="mt-6 rounded-xl border-2 border-stone-800 bg-amber-50 px-4 py-3 font-serif text-sm text-stone-700 shadow-[3px_3px_0_rgba(0,0,0,1)]">
+                Loading arena data from the database...
+              </div>
+            )}
+          </div>
         </div>
-      </footer>
+      )}
 
       {selectedTile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 px-4 py-8"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 px-2 sm:px-4 py-4 sm:py-8"
           onClick={closeTileDetails}
         >
           <div
@@ -418,62 +462,62 @@ export default function HomeArena() {
             aria-modal="true"
             aria-labelledby="challenge-details-title"
           >
-            <div className="flex items-center justify-between bg-stone-800 px-5 py-4">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2 bg-stone-800 px-3 sm:px-5 py-3 sm:py-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-amber-300 bg-stone-700 text-amber-300">
                   {selectedTile.icon}
                 </div>
-                <div>
-                  <p className="font-serif text-xs uppercase tracking-[0.3em] text-amber-300">Completed Challenge</p>
-                  <h2 id="challenge-details-title" className="font-serif text-2xl font-bold text-amber-50">
+                <div className="min-w-0">
+                  <p className="font-serif text-[10px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] text-amber-300">Completed Challenge</p>
+                  <h2 id="challenge-details-title" className="font-serif text-lg sm:text-2xl font-bold text-amber-50 break-words">
                     {selectedTile.label}
                   </h2>
                 </div>
               </div>
               <button
-                className="rounded-full border-2 border-amber-300 px-3 py-1 font-serif text-sm font-bold text-amber-100 transition hover:bg-stone-700"
+                className="shrink-0 rounded-full border-2 border-amber-300 px-2 sm:px-3 py-1 font-serif text-xs sm:text-sm font-bold text-amber-100 transition hover:bg-stone-700"
                 onClick={closeTileDetails}
               >
                 Close
               </button>
             </div>
 
-            <div className="grid max-h-[70vh] gap-5 overflow-y-auto p-5 md:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid max-h-[70vh] gap-4 sm:gap-5 overflow-y-auto p-3 sm:p-5 md:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-4">
                 <div className="rounded-xl border-2 border-stone-800 bg-white/80 p-4">
                   <p className="font-serif text-xs uppercase tracking-widest text-stone-500">Challenge Details</p>
                   <div className="mt-3 space-y-3 font-serif text-stone-800">
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Tile ID</span>
-                      <span className="text-lg font-bold">#{selectedTile.id + 1}</span>
+                      <span className="text-lg font-bold text-right break-words">#{selectedTile.id + 1}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Status</span>
-                      <span className="text-lg font-bold text-emerald-700">Completed</span>
+                      <span className="text-lg font-bold text-emerald-700 text-right break-words">Completed</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Points</span>
-                      <span className="text-lg font-bold text-orange-700">+{selectedTile.points}</span>
+                      <span className="text-lg font-bold text-orange-700 text-right break-words">+{selectedTile.points}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Tier</span>
-                      <span className="text-lg font-bold">{getSpecialLabel(selectedTile.specialType)}</span>
+                      <span className="text-lg font-bold text-right break-words">{getSpecialLabel(selectedTile.specialType)}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Challenge</span>
-                      <span className="text-lg font-bold">{selectedTile.label}</span>
+                      <span className="text-lg font-bold text-right break-words">{selectedTile.label}</span>
                     </div>
                     <div className="border-b border-stone-300 pb-2">
                       <span className="block text-sm uppercase tracking-wide text-stone-500">Description</span>
                       <p className="mt-1 text-base leading-6 text-stone-700">{selectedTile.description}</p>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b border-stone-300 pb-2">
+                    <div className="flex items-start justify-between gap-4 border-b border-stone-300 pb-2">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Completed By</span>
-                      <span className="text-lg font-bold">{selectedTile.completedBy ?? "Unknown"}</span>
+                      <span className="text-lg font-bold text-right break-words">{selectedTile.completedBy ?? "Unknown"}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-sm uppercase tracking-wide text-stone-500">Session</span>
-                      <span className="text-lg font-bold">{selectedTile.sessionName ?? "Unknown"}</span>
+                      <span className="text-lg font-bold text-right break-words">{selectedTile.sessionName ?? "Unknown"}</span>
                     </div>
                   </div>
                 </div>
