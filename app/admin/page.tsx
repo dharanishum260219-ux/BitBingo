@@ -13,7 +13,6 @@ import {
   Scroll,
   Clock,
   Gem,
-  Settings,
   LogOut,
   Plus,
   Square,
@@ -123,7 +122,7 @@ function CurrentSessionPanel() {
             </p>
             <Btn
               variant="stop"
-              onClick={() => stopSession(activeSession.id)}
+              onClick={() => void stopSession(activeSession.id)}
               className="mt-3"
             >
               <Square className="w-3 h-3" />
@@ -144,9 +143,9 @@ function CreateSessionPanel() {
   const { createSession } = useArena()
   const [name, setName] = useState("")
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return
-    createSession(name)
+    await createSession(name)
     setName("")
   }
 
@@ -175,9 +174,9 @@ function RegisterTeamPanel() {
   const { registerTeam } = useArena()
   const [name, setName] = useState("")
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) return
-    registerTeam(name)
+    await registerTeam(name)
     setName("")
   }
 
@@ -222,7 +221,7 @@ function ActiveRosterPanel() {
                 <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
                   {team.score} PTS
                 </span>
-                <Btn variant="stop" onClick={() => deleteTeam(team.id)}>
+                <Btn variant="stop" onClick={() => void deleteTeam(team.id)}>
                   <Trash2 className="w-3 h-3" />
                   DELETE TEAM
                 </Btn>
@@ -260,7 +259,7 @@ function SessionHistoryPanel() {
                   {session.status}
                 </span>
                 {session.status === "Active" && (
-                  <Btn variant="stop" onClick={() => stopSession(session.id)}>
+                  <Btn variant="stop" onClick={() => void stopSession(session.id)}>
                     <Square className="w-3 h-3" />
                     STOP SESSION
                   </Btn>
@@ -346,10 +345,6 @@ export default function AdminPage() {
 
         <SessionHistoryPanel />
       </main>
-
-      <div className="fixed top-20 right-4 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-amber-600 to-orange-700 border-4 border-stone-900 flex items-center justify-center shadow-[3px_3px_0_rgba(0,0,0,1)]">
-        <Settings className="w-6 h-6 text-amber-100" />
-      </div>
 
       <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center gap-2">

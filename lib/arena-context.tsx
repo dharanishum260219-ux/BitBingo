@@ -1,96 +1,151 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
-export interface Team {
-  id: string
-  name: string
-  score: number
-  status: "Active" | "Disqualified"
-}
-
-export interface Session {
-  id: string
-  name: string
-  status: "Active" | "Stopped"
-  startedAt: Date
-}
+import type { ArenaChallenge, ArenaCompletion, ArenaSession, ArenaSnapshot, ArenaTeam } from "@/lib/arena-types"
 
 interface ArenaContextValue {
-  teams: Team[]
-  sessions: Session[]
-  activeSession: Session | null
-  registerTeam: (name: string) => void
-  deleteTeam: (id: string) => void
-  awardPoint: (id: string) => void
-  createSession: (name: string) => void
-  stopSession: (id: string) => void
+  teams: ArenaTeam[]
+  sessions: ArenaSession[]
+  activeSession: ArenaSession | null
+  challenges: ArenaChallenge[]
+  completions: ArenaCompletion[]
+  isLoading: boolean
+  refreshArena: () => Promise<void>
+  registerTeam: (name: string) => Promise<void>
+  deleteTeam: (id: string) => Promise<void>
+  awardPoint: (id: string) => Promise<void>
+  createSession: (name: string) => Promise<void>
+  stopSession: (id: string) => Promise<void>
+  logCompletion: (input: { participantId: string; challengeId: number; proofUrl: string | null }) => Promise<void>
 }
 
 const ArenaContext = createContext<ArenaContextValue | null>(null)
 
-const INITIAL_TEAMS: Team[] = [
-  { id: "1", name: "hinata", score: 1, status: "Active" },
-  { id: "2", name: "kakashi", score: 0, status: "Active" },
-  { id: "3", name: "naruto", score: 1, status: "Active" },
-  { id: "4", name: "sakura", score: 0, status: "Active" },
-  { id: "5", name: "sasuke", score: 0, status: "Active" },
-]
-
-const INITIAL_SESSIONS: Session[] = [
-  { id: "s1", name: "bit", status: "Active", startedAt: new Date() },
-]
+const EMPTY_SNAPSHOT: ArenaSnapshot = {
+  teams: [],
+  sessions: [],
+  activeSession: null,
+  challenges: [],
+  completions: [],
+}
 
 export function ArenaProvider({ children }: { children: ReactNode }) {
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS)
-  const [sessions, setSessions] = useState<Session[]>(INITIAL_SESSIONS)
+  const [snapshot, setSnapshot] = useState<ArenaSnapshot>(EMPTY_SNAPSHOT)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const activeSession = sessions.find((s) => s.status === "Active") ?? null
+  const refreshArena = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/arena", { cache: "no-store" })
+      if (!response.ok) {
+        throw new Error(`Failed to load arena data: ${response.status}`)
+      }
 
-  const registerTeam = useCallback((name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setTeams((prev) => [
-      ...prev,
-      { id: Date.now().toString(), name: trimmed, score: 0, status: "Active" },
-    ])
+      const data = (await response.json()) as ArenaSnapshot
+      setSnapshot(data)
+    } catch {
+      setSnapshot(EMPTY_SNAPSHOT)
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
-  const deleteTeam = useCallback((id: string) => {
-    setTeams((prev) => prev.filter((t) => t.id !== id))
-  }, [])
+  useEffect(() => {
+    void refreshArena()
+  }, [refreshArena])
 
-  const awardPoint = useCallback((id: string) => {
-    setTeams((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, score: t.score + 1 } : t))
-    )
-  }, [])
+  const callMutation = useCallback(
+    async (path: string, init: RequestInit) => {
+      const response = await fetch(path, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(init.headers ?? {}),
+        },
+      })
 
-  const createSession = useCallback((name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setSessions((prev) =>
-      prev.map((s) => (s.status === "Active" ? { ...s, status: "Stopped" } : s))
-    )
-    setSessions((prev) => [
-      ...prev,
-      { id: Date.now().toString(), name: trimmed, status: "Active", startedAt: new Date() },
-    ])
-  }, [])
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Request failed with ${response.status}`)
+      }
 
-  const stopSession = useCallback((id: string) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: "Stopped" } : s))
-    )
-  }, [])
-
-  return (
-    <ArenaContext.Provider
-      value={{ teams, sessions, activeSession, registerTeam, deleteTeam, awardPoint, createSession, stopSession }}
-    >
-      {children}
-    </ArenaContext.Provider>
+      await refreshArena()
+    },
+    [refreshArena],
   )
+
+  const registerTeam = useCallback(
+    async (name: string) => {
+      await callMutation("/api/arena/teams", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      })
+    },
+    [callMutation],
+  )
+
+  const deleteTeam = useCallback(
+    async (id: string) => {
+      await callMutation(`/api/arena/teams/${id}`, { method: "DELETE" })
+    },
+    [callMutation],
+  )
+
+  const awardPoint = useCallback(
+    async (id: string) => {
+      await callMutation(`/api/arena/teams/${id}/score`, { method: "POST" })
+    },
+    [callMutation],
+  )
+
+  const createSession = useCallback(
+    async (name: string) => {
+      await callMutation("/api/arena/sessions", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      })
+    },
+    [callMutation],
+  )
+
+  const stopSession = useCallback(
+    async (id: string) => {
+      await callMutation(`/api/arena/sessions/${id}`, { method: "PATCH" })
+    },
+    [callMutation],
+  )
+
+  const logCompletion = useCallback(
+    async (input: { participantId: string; challengeId: number; proofUrl: string | null }) => {
+      await callMutation("/api/arena/completions", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })
+    },
+    [callMutation],
+  )
+
+  const value = useMemo<ArenaContextValue>(
+    () => ({
+      teams: snapshot.teams,
+      sessions: snapshot.sessions,
+      activeSession: snapshot.activeSession,
+      challenges: snapshot.challenges,
+      completions: snapshot.completions,
+      isLoading,
+      refreshArena,
+      registerTeam,
+      deleteTeam,
+      awardPoint,
+      createSession,
+      stopSession,
+      logCompletion,
+    }),
+    [awardPoint, createSession, deleteTeam, isLoading, logCompletion, refreshArena, registerTeam, snapshot, stopSession],
+  )
+
+  return <ArenaContext.Provider value={value}>{children}</ArenaContext.Provider>
 }
 
 export function useArena() {

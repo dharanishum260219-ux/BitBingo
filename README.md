@@ -22,7 +22,7 @@ A real-time event management web application for live coding competitions, style
 
 ```bash
 cp .env.local.example .env.local
-# Edit .env.local with your Supabase project URL and anon key
+# Edit .env.local with your Supabase project URL, anon key, and service role key
 ```
 
 ### 2. Run the database migration

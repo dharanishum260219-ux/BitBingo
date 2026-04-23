@@ -10,10 +10,7 @@ import {
   Zap,
   Gem,
   Scroll,
-  Users,
-  Trophy,
   Stamp,
-  AlertCircle,
 } from "lucide-react"
 
 function Btn({
@@ -217,115 +214,31 @@ function SessionSummaryPanel() {
   )
 }
 
-function CrewRegistrationPanel() {
-  const { registerTeam } = useArena()
-  const [name, setName] = useState("")
-  const [station, setStation] = useState("")
-
-  const handleRegister = () => {
-    if (!name.trim()) return
-    registerTeam(name)
-    setName("")
-    setStation("")
-  }
-
-  return (
-    <Card className="mb-8">
-      <CardHeader icon={<Users className="w-6 h-6" />} title="Crew Registration Ledger" color="amber" />
-      <div className="p-6">
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-4">
-            <div>
-              <FormLabel>Team Name</FormLabel>
-              <TextInput value={name} onChange={setName} placeholder="e.g., Dragon Slayers" />
-            </div>
-            <div>
-              <FormLabel>Station / PC Number</FormLabel>
-              <TextInput value={station} onChange={setStation} placeholder="e.g., Station-05" />
-            </div>
-          </div>
-          <div className="flex items-end">
-            <Btn
-              variant="gold"
-              onClick={handleRegister}
-              disabled={!name.trim()}
-              className="w-full py-4 text-base"
-            >
-              Register Crew
-            </Btn>
-          </div>
-        </div>
-        <div className="mt-4 p-3 bg-orange-50 border-l-4 border-orange-600 flex gap-2">
-          <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm font-sans text-stone-700">
-            Each team must register their station before completing quests.
-          </p>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function ActiveRosterPanel() {
-  const { teams, deleteTeam } = useArena()
-
-  return (
-    <Card className="mb-8">
-      <CardHeader icon={<Trophy className="w-6 h-6" />} title="Active Roster" color="amber" />
-      <div className="p-4">
-        {teams.length === 0 && (
-          <p className="text-center font-sans text-stone-500 py-4 text-sm">No teams registered yet.</p>
-        )}
-        <div className="flex flex-col divide-y divide-dashed divide-stone-400">
-          {teams.map((team) => (
-            <div key={team.id} className="flex items-center justify-between py-3 px-2">
-              <span className="font-cursive text-xl text-stone-800">{team.name}</span>
-              <div className="flex items-center gap-3 ml-auto">
-                <span className="text-[10px] uppercase tracking-widest font-sans text-stone-500 whitespace-nowrap">
-                  {team.score} PTS
-                </span>
-                <button
-                  type="button"
-                  onClick={() => deleteTeam(team.id)}
-                  className="border-2 border-[#7a6130] bg-gradient-to-b from-[#e8d48a] to-[#c9a84c] text-[#3d2b00] font-serif font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-lg shadow-[0_2px_0_#7a6130] hover:-translate-y-0.5 hover:shadow-[0_3px_0_#7a6130] transition-all cursor-pointer"
-                >
-                  DELETE TEAM
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-const QUEST_NAMES = [
-  "Slay Dragon", "Find Relic", "Save Village", "Decode Runes",
-  "Cross Chasm", "Defeat Boss", "Gather Herbs", "Forge Sword",
-  "Unlock Gate", "Find Map", "Heal Ally", "Cast Spell",
-  "Build Camp", "Scout Area", "Trade Gold",
-]
-
 function ControlDeckPanel() {
-  const { teams, awardPoint, activeSession } = useArena()
+  const { teams, challenges, logCompletion, activeSession } = useArena()
   const [selectedTeam, setSelectedTeam] = useState("")
   const [selectedQuest, setSelectedQuest] = useState("")
   const [proof, setProof] = useState("")
   const [completionDetails, setCompletionDetails] = useState<CompletionDetails | null>(null)
 
-  const handleStamp = () => {
+  const handleStamp = async () => {
     if (!selectedTeam || !selectedQuest) return
     const team = teams.find((t) => t.name === selectedTeam)
-    if (team) {
-      awardPoint(team.id)
+    const challenge = challenges.find((entry) => entry.title === selectedQuest)
+
+    if (team && challenge) {
+      await logCompletion({
+        participantId: team.id,
+        challengeId: challenge.id,
+        proofUrl: proof.trim() || null,
+      })
       setCompletionDetails({
         team: selectedTeam,
         quest: selectedQuest,
         proof: proof.trim(),
         session: activeSession?.name ?? "No Active Session",
         stampedAt: new Date().toLocaleString(),
-        newScore: team.score + 1,
+        newScore: team.score + challenge.points,
       })
     }
     setSelectedTeam("")
@@ -334,6 +247,7 @@ function ControlDeckPanel() {
   }
 
   const teamNames = teams.map((t) => t.name)
+  const questNames = challenges.map((challenge) => challenge.title)
 
   return (
     <>
@@ -347,7 +261,7 @@ function ControlDeckPanel() {
             </div>
             <div>
               <FormLabel>Select Quest / Tile</FormLabel>
-              <SelectInput value={selectedQuest} onChange={setSelectedQuest} options={QUEST_NAMES} placeholder="Select Quest" />
+              <SelectInput value={selectedQuest} onChange={setSelectedQuest} options={questNames} placeholder="Select Quest" />
             </div>
           </div>
 
@@ -415,8 +329,6 @@ export default function CoordinatorDeck() {
 
       <main className="max-w-5xl mx-auto px-4 py-8 pb-24">
         <SessionSummaryPanel />
-        <CrewRegistrationPanel />
-        <ActiveRosterPanel />
         <ControlDeckPanel />
       </main>
 
