@@ -1,53 +1,31 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Chakra_Petch, Pirata_One } from "next/font/google";
-import "./globals.css";
-
-const displayFont = Pirata_One({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-display",
-});
-
-const uiFont = Chakra_Petch({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-  variable: "--font-ui",
-});
+/* eslint-disable @next/next/no-page-custom-font */
+import type { Metadata } from "next"
+import { ArenaProvider } from "@/lib/arena-context"
+import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "BitBingo | Quest Arena",
-  description:
-    "A live coding arena with scoreboard battles, challenge tiles, and instant proof updates.",
-};
+  title: "BitBingo - Fantasy Quest Arena",
+  description: "Enter the Live Quest Arena and conquer the Bingo Board",
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${displayFont.variable} ${uiFont.variable} h-full`}
-    >
-      <body className="min-h-full game-bg text-[var(--ink-900)]">
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-          <span className="ambient-glow ambient-glow-a" />
-          <span className="ambient-glow ambient-glow-b" />
-        </div>
-
-        <Link
-          href="/admin"
-          aria-label="Admin settings"
-          title="Admin settings"
-          className="icon-orb fixed right-4 top-4 z-50"
-        >
-          CTRL
-        </Link>
-
-        <div className="min-h-full flex flex-col">{children}</div>
+    <html lang="en" className="bg-amber-50">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,700&family=Caveat:wght@400;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="font-serif antialiased min-h-screen">
+        <ArenaProvider>{children}</ArenaProvider>
       </body>
     </html>
-  );
+  )
 }
