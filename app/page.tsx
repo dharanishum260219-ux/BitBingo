@@ -254,14 +254,14 @@ function BingoTileComponent({ tile, onClick }: { tile: BoardTile; onClick: () =>
 
 function QuestGrid({ tiles, onTileClick }: { tiles: BoardTile[]; onTileClick: (id: number) => void }) {
   return (
-    <div className="bg-amber-100 border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden">
+    <div className="w-full max-w-full bg-amber-100 border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden">
       <div className="bg-stone-800 px-4 py-3 flex items-center gap-3">
         <Map className="w-6 h-6 text-teal-400" />
         <h2 className="font-serif text-xl font-bold text-amber-100 tracking-wide">Quest Grid</h2>
       </div>
       <div className="h-2 bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
       <div className="overflow-x-auto p-3 md:p-4">
-        <div className="grid min-w-[430px] sm:min-w-[560px] grid-cols-5 gap-2 md:min-w-0">
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
           {tiles.map((tile) => (
             <BingoTileComponent key={tile.id} tile={tile} onClick={() => onTileClick(tile.id)} />
           ))}
@@ -405,10 +405,10 @@ export default function HomeArena() {
             </section>
 
             <section className="grid lg:grid-cols-5 gap-6">
-              <div className="lg:col-span-2">
+              <div className="min-w-0 lg:col-span-2">
                 <BountyBoard />
               </div>
-              <div className="lg:col-span-3">
+              <div className="min-w-0 lg:col-span-3">
                 <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
               </div>
             </section>
@@ -467,10 +467,10 @@ export default function HomeArena() {
             </div>
 
             <section className="grid items-start gap-4 md:gap-6 xl:grid-cols-5">
-              <div className="xl:col-span-2 xl:pt-3">
+              <div className="min-w-0 xl:col-span-2 xl:pt-3">
                 <BountyBoard />
               </div>
-              <div className="xl:col-span-3">
+              <div className="min-w-0 xl:col-span-3">
                 <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
               </div>
             </section>

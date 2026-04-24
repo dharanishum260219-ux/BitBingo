@@ -6,57 +6,82 @@ import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
 import { ArrowLeft, Upload, Zap, Gem, Scroll, Users, Stamp } from "lucide-react"
 
-const MAX_UPLOAD_FILE_BYTES = 20 * 1024 * 1024
+const MAX_UPLOAD_FILE_BYTES = 12 * 1024 * 1024
+const MAX_PROCESSED_IMAGE_BYTES = 1_500_000
 const TARGET_UPLOAD_MAX_EDGE = 1280
-const TARGET_UPLOAD_QUALITY = 0.72
+const TARGET_UPLOAD_QUALITY = 0.68
 
-function readFileAsDataUrl(file: File) {
+function loadImageElement(objectUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Failed to process image."))
+    image.src = objectUrl
+  })
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Unable to compress this image."))
+          return
+        }
+        resolve(blob)
+      },
+      "image/jpeg",
+      quality,
+    )
+  })
+}
+
+function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : ""
       if (!result) {
-        reject(new Error("Failed to read image file."))
+        reject(new Error("Failed to finalize image."))
         return
       }
       resolve(result)
     }
-    reader.onerror = () => reject(new Error("Failed to read image file."))
-    reader.readAsDataURL(file)
+    reader.onerror = () => reject(new Error("Failed to finalize image."))
+    reader.readAsDataURL(blob)
   })
 }
 
-function loadImageElement(dataUrl: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error("Failed to process image."))
-    image.src = dataUrl
-  })
-}
+async function compressImageDataUrl(file: File) {
+  const objectUrl = URL.createObjectURL(file)
 
-async function compressImageDataUrl(dataUrl: string) {
-  const image = await loadImageElement(dataUrl)
-  const largestEdge = Math.max(image.width, image.height)
-  if (largestEdge <= TARGET_UPLOAD_MAX_EDGE) {
-    return dataUrl
+  try {
+    const image = await loadImageElement(objectUrl)
+    const largestEdge = Math.max(image.width, image.height)
+    const scale = largestEdge > TARGET_UPLOAD_MAX_EDGE ? TARGET_UPLOAD_MAX_EDGE / largestEdge : 1
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext("2d")
+    if (!context) {
+      throw new Error("Failed to prepare image compression.")
+    }
+
+    context.drawImage(image, 0, 0, width, height)
+    const compressedBlob = await canvasToBlob(canvas, TARGET_UPLOAD_QUALITY)
+
+    if (compressedBlob.size > MAX_PROCESSED_IMAGE_BYTES) {
+      throw new Error("Compressed image is still too large. Try a smaller photo.")
+    }
+
+    return await blobToDataUrl(compressedBlob)
+  } finally {
+    URL.revokeObjectURL(objectUrl)
   }
-
-  const scale = TARGET_UPLOAD_MAX_EDGE / largestEdge
-  const width = Math.max(1, Math.round(image.width * scale))
-  const height = Math.max(1, Math.round(image.height * scale))
-
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-
-  const context = canvas.getContext("2d")
-  if (!context) {
-    return dataUrl
-  }
-
-  context.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL("image/jpeg", TARGET_UPLOAD_QUALITY)
 }
 
 function Btn({
@@ -261,19 +286,21 @@ function ControlDeckPanel() {
     }
 
     if (file.size > MAX_UPLOAD_FILE_BYTES) {
-      setSubmitError("Image is too large. Please choose one under 20MB.")
+      setSubmitError("Image is too large. Please choose one under 12MB.")
       event.target.value = ""
       return
     }
 
     try {
-      const rawDataUrl = await readFileAsDataUrl(file)
-      const compressedDataUrl = await compressImageDataUrl(rawDataUrl)
+      const compressedDataUrl = await compressImageDataUrl(file)
       setProofImageUrl(compressedDataUrl)
       setProofFileName(file.name)
       setProof("")
-    } catch {
-      setSubmitError("Unable to process this image. Try another file.")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      setSubmitError(
+        message || "Unable to process this image on this device. Try a smaller image or submit notes/URL instead.",
+      )
     }
 
     event.target.value = ""
