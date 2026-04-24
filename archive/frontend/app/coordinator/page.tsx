@@ -11,13 +11,28 @@ import {
   Gem,
   Scroll,
   Users,
-  Target,
   Trophy,
   Stamp,
   AlertCircle,
 } from "lucide-react"
 
-// ─── Shared button ────────────────────────────────────────────────
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`
+}
+
 function Btn({
   children,
   variant = "default",
@@ -54,7 +69,6 @@ function Btn({
   )
 }
 
-// ─── Parchment Card ───────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`bg-[#e8d9a0] border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden ${className}`}>
@@ -81,7 +95,6 @@ function CardHeader({ icon, title, color = "amber" }: { icon: React.ReactNode; t
   )
 }
 
-// ─── Form helpers ─────────────────────────────────────────────────
 function FormLabel({ children }: { children: React.ReactNode }) {
   return (
     <label className="block font-sans font-bold text-stone-800 text-[10px] uppercase tracking-widest mb-1">
@@ -109,7 +122,7 @@ function SelectInput({ value, onChange, options, placeholder }: { value: string;
       onChange={(e) => onChange(e.target.value)}
       className="w-full px-4 py-3 bg-white/70 border-2 border-stone-900 font-sans text-stone-800 focus:outline-none rounded-lg cursor-pointer"
     >
-      <option value="">{placeholder ?? "Select…"}</option>
+      <option value="">{placeholder ?? "Select..."}</option>
       {options.map((o) => (
         <option key={o} value={o}>{o}</option>
       ))}
@@ -117,9 +130,77 @@ function SelectInput({ value, onChange, options, placeholder }: { value: string;
   )
 }
 
-// ─── Session Summary Panel ─────────────────────────────────────────
+interface CompletionDetails {
+  team: string
+  quest: string
+  proof: string
+  session: string
+  stampedAt: string
+  newScore: number
+}
+
+function CompletionPopup({ details, onClose }: { details: CompletionDetails | null; onClose: () => void }) {
+  if (!details) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Close completion popup"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/50"
+      />
+
+      <div className="relative w-full max-w-xl bg-amber-100 border-4 border-stone-900 rounded-xl shadow-[8px_8px_0_rgba(0,0,0,1)] overflow-hidden">
+        <div className="bg-stone-800 px-5 py-4 flex items-center gap-3">
+          <Stamp className="w-6 h-6 text-amber-400" />
+          <h3 className="font-sans text-xl font-bold text-amber-100 tracking-wide">Challenge Completed</h3>
+        </div>
+        <div className="h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
+
+        <div className="p-5 space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Team</p>
+              <p className="font-sans font-bold text-stone-900 text-lg">{details.team}</p>
+            </div>
+            <div>
+              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
+              <p className="font-sans font-bold text-stone-900 text-lg">{details.session}</p>
+            </div>
+            <div>
+              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Quest</p>
+              <p className="font-sans font-bold text-stone-900 text-lg">{details.quest}</p>
+            </div>
+            <div>
+              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Updated Score</p>
+              <p className="font-sans font-bold text-emerald-700 text-lg">{details.newScore} PTS</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600 mb-1">Proof / Notes</p>
+            <p className="font-sans text-stone-800 bg-orange-50 border-2 border-stone-300 rounded-lg px-3 py-2 min-h-12">
+              {details.proof || "No additional proof notes provided."}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 text-xs font-sans uppercase tracking-wider text-stone-600">
+            <span>Stamped at {details.stampedAt}</span>
+            <span className="text-emerald-700 font-bold">Successfully Logged</span>
+          </div>
+        </div>
+
+        <div className="border-t-2 border-stone-400 bg-amber-200/60 px-5 py-3 flex justify-end">
+          <Btn onClick={onClose} className="px-6">Close</Btn>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SessionSummaryPanel() {
-  const { activeSession, teams } = useArena()
+  const { activeSession, teams, remainingTimeMs, isSessionExpired } = useArena()
 
   return (
     <Card className="mb-8">
@@ -128,12 +209,14 @@ function SessionSummaryPanel() {
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
           <p className="font-sans text-lg font-bold text-stone-900">
-            {activeSession ? activeSession.name : "—"}
+            {activeSession ? activeSession.name : "-"}
           </p>
         </div>
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Time Remaining</p>
-          <p className="font-sans text-lg font-bold text-stone-900">45:00</p>
+          <p className="font-sans text-lg font-bold text-stone-900">
+            {activeSession ? formatDuration(remainingTimeMs) : "--:--"}
+          </p>
         </div>
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Live Teams</p>
@@ -144,7 +227,7 @@ function SessionSummaryPanel() {
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-3 h-3 rounded-full ${activeSession ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
             <span className={`font-sans font-bold text-sm ${activeSession ? "text-emerald-700" : "text-stone-500"}`}>
-              {activeSession ? "LIVE" : "INACTIVE"}
+              {activeSession ? (isSessionExpired ? "ENDED" : "LIVE") : "INACTIVE"}
             </span>
           </div>
         </div>
@@ -153,17 +236,18 @@ function SessionSummaryPanel() {
   )
 }
 
-// ─── Crew Registration Panel ───────────────────────────────────────
 function CrewRegistrationPanel() {
-  const { registerTeam } = useArena()
+  const { registerTeam, activeSession } = useArena()
   const [name, setName] = useState("")
   const [station, setStation] = useState("")
 
   const handleRegister = () => {
     if (!name.trim()) return
-    registerTeam(name)
-    setName("")
-    setStation("")
+    const added = registerTeam(name, station)
+    if (added) {
+      setName("")
+      setStation("")
+    }
   }
 
   return (
@@ -185,7 +269,7 @@ function CrewRegistrationPanel() {
             <Btn
               variant="gold"
               onClick={handleRegister}
-              disabled={!name.trim()}
+              disabled={!name.trim() || !activeSession}
               className="w-full py-4 text-base"
             >
               Register Crew
@@ -203,7 +287,6 @@ function CrewRegistrationPanel() {
   )
 }
 
-// ─── Active Roster Panel ───────────────────────────────────────────
 function ActiveRosterPanel() {
   const { teams, deleteTeam } = useArena()
 
@@ -238,87 +321,112 @@ function ActiveRosterPanel() {
   )
 }
 
-// ─── Control Deck Panel ────────────────────────────────────────────
-const QUEST_NAMES = [
-  "Slay Dragon", "Find Relic", "Save Village", "Decode Runes",
-  "Cross Chasm", "Defeat Boss", "Gather Herbs", "Forge Sword",
-  "Unlock Gate", "Find Map", "Heal Ally", "Cast Spell",
-  "Build Camp", "Scout Area", "Trade Gold",
-]
-
 function ControlDeckPanel() {
-  const { teams, awardPoint } = useArena()
+  const { teams, awardPoint, activeSession, isSessionExpired } = useArena()
   const [selectedTeam, setSelectedTeam] = useState("")
   const [selectedQuest, setSelectedQuest] = useState("")
   const [proof, setProof] = useState("")
+  const [completionDetails, setCompletionDetails] = useState<CompletionDetails | null>(null)
 
   const handleStamp = () => {
-    if (!selectedTeam || !selectedQuest) return
+    if (!selectedTeam || !selectedQuest || isSessionExpired) return
     const team = teams.find((t) => t.name === selectedTeam)
-    if (team) awardPoint(team.id)
+    const selectedQuestion = activeSession?.questions.find(
+      (question) => question.prompt === selectedQuest
+    )
+    const points = selectedQuestion?.marks ?? 1
+
+    if (team) {
+      const updated = awardPoint(team.id, points)
+      if (updated) {
+        setCompletionDetails({
+          team: selectedTeam,
+          quest: selectedQuest,
+          proof: proof.trim(),
+          session: activeSession?.name ?? "No Active Session",
+          stampedAt: new Date().toLocaleString(),
+          newScore: team.score + points,
+        })
+      }
+    }
     setSelectedTeam("")
     setSelectedQuest("")
     setProof("")
   }
 
   const teamNames = teams.map((t) => t.name)
+  const questionNames = activeSession?.questions.map((question) => question.prompt) ?? []
+  const selectedQuestionMarks =
+    activeSession?.questions.find((question) => question.prompt === selectedQuest)?.marks ?? 0
 
   return (
-    <Card>
-      <CardHeader icon={<Scroll className="w-6 h-6" />} title="Control Deck: Log Completions" color="teal" />
-      <div className="p-6 space-y-6">
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <FormLabel>Select Team</FormLabel>
-            <SelectInput value={selectedTeam} onChange={setSelectedTeam} options={teamNames} placeholder="Select Team" />
-          </div>
-          <div>
-            <FormLabel>Select Quest / Tile</FormLabel>
-            <SelectInput value={selectedQuest} onChange={setSelectedQuest} options={QUEST_NAMES} placeholder="Select Quest" />
-          </div>
-        </div>
-
-        <div>
-          <FormLabel>Proof of Completion</FormLabel>
-          <div className="bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 bg-orange-200 border-2 border-stone-800 rounded-lg flex items-center justify-center">
-                <Upload className="w-6 h-6 text-stone-700" />
-              </div>
-              <div>
-                <p className="font-sans font-bold text-stone-800">Upload Intel Dossier</p>
-                <p className="text-sm font-sans text-stone-600">Screenshot, photo, or verification</p>
-              </div>
+    <>
+      <Card>
+        <CardHeader icon={<Scroll className="w-6 h-6" />} title="Control Deck: Log Completions" color="teal" />
+        <div className="p-6 space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <FormLabel>Select Team</FormLabel>
+              <SelectInput value={selectedTeam} onChange={setSelectedTeam} options={teamNames} placeholder="Select Team" />
+            </div>
+            <div>
+              <FormLabel>Select Quest / Tile</FormLabel>
+              <SelectInput value={selectedQuest} onChange={setSelectedQuest} options={questionNames} placeholder="Select Quest" />
+              {selectedQuestionMarks > 0 && (
+                <p className="mt-2 text-[11px] uppercase tracking-widest font-sans text-emerald-700">
+                  Marks for selected question: {selectedQuestionMarks}
+                </p>
+              )}
             </div>
           </div>
-          <textarea
-            placeholder="Add notes or verification details..."
-            value={proof}
-            onChange={(e) => setProof(e.target.value)}
-            className="mt-3 w-full px-4 py-3 bg-amber-50/50 border-2 border-stone-900 font-sans text-stone-800 placeholder-stone-400 focus:outline-none rounded-lg min-h-20 resize-none"
-          />
-        </div>
 
-        <div className="flex justify-center pt-2">
-          <Btn
-            variant="stamp"
-            onClick={handleStamp}
-            disabled={!selectedTeam || !selectedQuest}
-          >
-            <Stamp className="w-6 h-6" />
-            STAMP COMPLETION
-          </Btn>
+          <div>
+            <FormLabel>Proof of Completion</FormLabel>
+            <div className="bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 bg-orange-200 border-2 border-stone-800 rounded-lg flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-stone-700" />
+                </div>
+                <div>
+                  <p className="font-sans font-bold text-stone-800">Upload Intel Dossier</p>
+                  <p className="text-sm font-sans text-stone-600">Screenshot, photo, or verification</p>
+                </div>
+              </div>
+            </div>
+            <textarea
+              placeholder="Add notes or verification details..."
+              value={proof}
+              onChange={(e) => setProof(e.target.value)}
+              className="mt-3 w-full px-4 py-3 bg-amber-50/50 border-2 border-stone-900 font-sans text-stone-800 placeholder-stone-400 focus:outline-none rounded-lg min-h-20 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-center pt-2">
+            <Btn
+              variant="stamp"
+              onClick={handleStamp}
+              disabled={!selectedTeam || !selectedQuest || isSessionExpired}
+            >
+              <Stamp className="w-6 h-6" />
+              STAMP COMPLETION
+            </Btn>
+          </div>
+          {isSessionExpired && (
+            <p className="text-center text-sm font-sans text-red-700 font-bold uppercase tracking-widest">
+              Session timer ended. Scoring is locked.
+            </p>
+          )}
         </div>
-      </div>
-    </Card>
+      </Card>
+
+      <CompletionPopup details={completionDetails} onClose={() => setCompletionDetails(null)} />
+    </>
   )
 }
 
-// ─── Page ──────────────────────────────────────────────────────────
 export default function CoordinatorDeck() {
   return (
     <FantasyBackground>
-      {/* Header Strip */}
       <header className="sticky top-0 z-40 bg-stone-800 border-b-4 border-stone-900 shadow-[0_4px_0_rgba(0,0,0,0.3)]">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/">
@@ -339,7 +447,6 @@ export default function CoordinatorDeck() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-5xl mx-auto px-4 py-8 pb-24">
         <SessionSummaryPanel />
         <CrewRegistrationPanel />
@@ -347,7 +454,6 @@ export default function CoordinatorDeck() {
         <ControlDeckPanel />
       </main>
 
-      {/* Footer Rail */}
       <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center gap-2">
           <Gem className="w-4 h-4 text-teal-400" />

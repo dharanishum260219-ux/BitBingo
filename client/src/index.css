@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f5e6b8;
+  --ink: #292524;
+}
+
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  background: radial-gradient(circle at 20% 10%, #fef3c7, #f59e0b 120%);
+  color: var(--ink);
+}
+
+button, input, select, textarea {
+  font: inherit;
+}

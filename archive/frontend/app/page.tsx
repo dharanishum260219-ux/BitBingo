@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
@@ -18,15 +18,15 @@ import {
   Gem,
   Map,
   Maximize2,
+  Minimize2,
   Play,
   Check,
-  Medal,
   Users,
   Clock,
   Award,
+  X,
 } from "lucide-react"
 
-// ─── Types ─────────────────────────────────────────────────────────
 interface BingoTile {
   id: number
   label: string
@@ -35,7 +35,23 @@ interface BingoTile {
   icon: React.ReactNode
 }
 
-// ─── Bingo board data ──────────────────────────────────────────────
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`
+}
+
 const questIcons = [
   <Swords key="swords" className="w-5 h-5" />,
   <Shield key="shield" className="w-5 h-5" />,
@@ -68,7 +84,6 @@ const generateBingoBoard = (): BingoTile[] => {
   }))
 }
 
-// ─── QuestChip ─────────────────────────────────────────────────────
 function QuestChip({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return (
     <div className="inline-flex items-center gap-2 bg-orange-100 border-2 border-stone-800 rounded-full px-4 py-2 shadow-[2px_2px_0_rgba(0,0,0,1)]">
@@ -79,7 +94,6 @@ function QuestChip({ label, value, icon }: { label: string; value: string; icon:
   )
 }
 
-// ─── ActionButton ──────────────────────────────────────────────────
 function ActionButton({
   children,
   variant = "primary",
@@ -105,7 +119,6 @@ function ActionButton({
   )
 }
 
-// ─── RankMedal ─────────────────────────────────────────────────────
 function RankMedal({ rank }: { rank: number }) {
   const colors: Record<number, string> = {
     1: "bg-yellow-400 text-yellow-900 border-yellow-600",
@@ -120,7 +133,6 @@ function RankMedal({ rank }: { rank: number }) {
   )
 }
 
-// ─── ProgressBar ───────────────────────────────────────────────────
 function ProgressBar({ value }: { value: number }) {
   return (
     <div className="w-full h-3 bg-stone-300 rounded-full border border-stone-500 overflow-hidden">
@@ -132,16 +144,11 @@ function ProgressBar({ value }: { value: number }) {
   )
 }
 
-// ─── BountyBoard ───────────────────────────────────────────────────
 function BountyBoard() {
   const { teams } = useArena()
-
-  // Sort by score descending, assign ranks
   const ranked = [...teams]
     .sort((a, b) => b.score - a.score)
     .map((t, i) => ({ ...t, rank: i + 1 }))
-
-  // Derive a fake "progress" percentage from score for the progress bar (max 5 pts = 100%)
   const maxScore = Math.max(...ranked.map((t) => t.score), 1)
 
   return (
@@ -187,7 +194,6 @@ function BountyBoard() {
   )
 }
 
-// ─── BingoTileComponent ───��───────────────────────���────────────────
 function BingoTileComponent({ tile, onClick }: { tile: BingoTile; onClick: () => void }) {
   const base =
     "relative aspect-square flex flex-col items-center justify-center p-2 border-[3px] border-stone-800 rounded-lg transition-all cursor-pointer"
@@ -225,7 +231,6 @@ function BingoTileComponent({ tile, onClick }: { tile: BingoTile; onClick: () =>
   )
 }
 
-// ─── QuestGrid ─────────────────────────────────────────────────────
 function QuestGrid({ tiles, onTileClick }: { tiles: BingoTile[]; onTileClick: (id: number) => void }) {
   return (
     <div className="bg-amber-100 border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden">
@@ -254,11 +259,145 @@ function QuestGrid({ tiles, onTileClick }: { tiles: BingoTile[]; onTileClick: (i
   )
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────
+function WinnersGraph({
+  series,
+}: {
+  series: Array<{ teamName: string; points: Array<{ step: number; score: number }> }>
+}) {
+  if (series.length === 0) {
+    return (
+      <div className="h-44 rounded-lg border-2 border-dashed border-stone-500 flex items-center justify-center text-sm font-serif text-stone-500">
+        No score history available.
+      </div>
+    )
+  }
+
+  const width = 680
+  const height = 260
+  const padding = 32
+  const colors = ["#ef4444", "#0d9488", "#eab308"]
+  const maxStep = Math.max(1, ...series.flatMap((line) => line.points.map((point) => point.step)))
+  const maxScore = Math.max(1, ...series.flatMap((line) => line.points.map((point) => point.score)))
+
+  const toX = (step: number) => {
+    if (maxStep === 0) return padding
+    return padding + (step / maxStep) * (width - padding * 2)
+  }
+
+  const toY = (score: number) => {
+    if (maxScore === 0) return height - padding
+    return height - padding - (score / maxScore) * (height - padding * 2)
+  }
+
+  return (
+    <div className="space-y-3">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-52 bg-orange-50 rounded-lg border-2 border-stone-400">
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#57534e" strokeWidth={2} />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#57534e" strokeWidth={2} />
+
+        {series.map((line, index) => {
+          const path = line.points
+            .map((point, pointIndex) => `${pointIndex === 0 ? "M" : "L"} ${toX(point.step)} ${toY(point.score)}`)
+            .join(" ")
+
+          return (
+            <g key={line.teamName}>
+              <path d={path} fill="none" stroke={colors[index % colors.length]} strokeWidth={4} strokeLinecap="round" />
+              {line.points.map((point) => (
+                <circle
+                  key={`${line.teamName}-${point.step}-${point.score}`}
+                  cx={toX(point.step)}
+                  cy={toY(point.score)}
+                  r={4}
+                  fill={colors[index % colors.length]}
+                />
+              ))}
+            </g>
+          )
+        })}
+      </svg>
+      <div className="flex flex-wrap gap-3">
+        {series.map((line, index) => (
+          <div key={line.teamName} className="inline-flex items-center gap-2 text-xs uppercase tracking-widest font-serif text-stone-700">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
+            {line.teamName}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WinnersModal({
+  open,
+  winners,
+  series,
+  onClose,
+}: {
+  open: boolean
+  winners: Array<{ rank: 1 | 2 | 3; name: string; score: number }>
+  series: Array<{ teamName: string; points: Array<{ step: number; score: number }> }>
+  onClose: () => void
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+      <button type="button" aria-label="Close winners" className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-3xl bg-amber-100 border-4 border-stone-900 rounded-xl shadow-[10px_10px_0_rgba(0,0,0,1)] overflow-hidden">
+        <div className="bg-stone-800 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Trophy className="w-6 h-6 text-amber-300" />
+            <h3 className="font-serif text-2xl font-bold text-amber-100 tracking-wide">Session Winners</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-md border border-amber-300/50 text-amber-100 hover:bg-amber-100/10"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="h-2 bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500" />
+        <div className="p-5 space-y-5">
+          <div className="grid md:grid-cols-3 gap-3">
+            {winners.map((winner) => (
+              <div key={winner.rank} className="bg-orange-50 border-2 border-stone-700 rounded-lg p-3">
+                <p className="text-[10px] uppercase tracking-widest font-serif text-stone-500">{winner.rank} Place</p>
+                <p className="font-cursive text-2xl text-stone-900">{winner.name}</p>
+                <p className="font-serif font-bold text-stone-700">{winner.score} pts</p>
+              </div>
+            ))}
+          </div>
+          <WinnersGraph series={series} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function HomeArena() {
-  const { teams } = useArena()
+  const {
+    teams,
+    activeSession,
+    remainingTimeMs,
+    winnersVisible,
+    winners,
+    winnerSeries,
+    dismissWinners,
+  } = useArena()
   const [bingoTiles, setBingoTiles] = useState<BingoTile[]>(generateBingoBoard())
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+
+    syncFullscreenState()
+    document.addEventListener("fullscreenchange", syncFullscreenState)
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenState)
+  }, [])
 
   const handleTileClick = (id: number) => {
     setBingoTiles((prev) =>
@@ -271,9 +410,20 @@ export default function HomeArena() {
   const completedCount = bingoTiles.filter((t) => t.completed).length
   const totalScore = teams.reduce((acc, t) => acc + t.score, 0)
 
+  const handleFullscreenToggle = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+  }
+
   return (
     <FantasyBackground>
-      {/* Admin Compass Button */}
       <Link href="/admin">
         <button
           className="fixed top-4 right-4 z-50 w-14 h-14 bg-gradient-to-br from-amber-600 to-orange-700 border-4 border-stone-900 rounded-full flex items-center justify-center shadow-[3px_3px_0_rgba(0,0,0,1)] hover:shadow-[4px_4px_0_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all cursor-pointer"
@@ -283,9 +433,7 @@ export default function HomeArena() {
         </button>
       </Link>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 pb-20">
-        {/* Hero Banner */}
         <section className="text-center mb-10">
           <div className="relative inline-block mb-6">
             <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-bold text-stone-900 tracking-tight">
@@ -298,7 +446,11 @@ export default function HomeArena() {
             <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
             <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
             <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
-            <QuestChip label="Time" value="2:45:30" icon={<Clock className="w-4 h-4" />} />
+            <QuestChip
+              label="Time"
+              value={activeSession ? formatDuration(remainingTimeMs) : "--:--"}
+              icon={<Clock className="w-4 h-4" />}
+            />
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
@@ -307,13 +459,16 @@ export default function HomeArena() {
                 Launch Coordinator
               </ActionButton>
             </Link>
-            <ActionButton variant="secondary" icon={<Maximize2 className="w-5 h-5" />}>
-              Enter Fullscreen Arena
+            <ActionButton
+              variant="secondary"
+              icon={isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              onClick={handleFullscreenToggle}
+            >
+              {isFullscreen ? "Exit Fullscreen Arena" : "Enter Fullscreen Arena"}
             </ActionButton>
           </div>
         </section>
 
-        {/* Arena Block */}
         <section className="grid lg:grid-cols-5 gap-6">
           <div className="lg:col-span-2">
             <BountyBoard />
@@ -324,7 +479,6 @@ export default function HomeArena() {
         </section>
       </main>
 
-      {/* Footer Rail */}
       <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
           <Gem className="w-4 h-4 text-teal-400" />
@@ -333,6 +487,13 @@ export default function HomeArena() {
           <span className="font-serif text-xs text-stone-500">v1.0.0</span>
         </div>
       </footer>
+
+      <WinnersModal
+        open={winnersVisible}
+        winners={winners}
+        series={winnerSeries}
+        onClose={dismissWinners}
+      />
     </FantasyBackground>
   )
 }

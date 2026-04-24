@@ -16,11 +16,130 @@ import {
   Settings,
   LogOut,
   Plus,
+  Timer,
   Square,
   Trash2,
 } from "lucide-react"
 
-// ─── Shared Button ────────────────────────────────────────────────
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`
+}
+
+function parseCsvLine(line: string) {
+  const cells: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]
+
+    if (char === '"') {
+      const next = line[i + 1]
+      if (inQuotes && next === '"') {
+        current += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current.trim())
+      current = ""
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current.trim())
+  return cells
+}
+
+function parseCsvFirstColumn(raw: string) {
+  const rows = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (rows.length === 0) return []
+
+  const parsedRows = rows.map(parseCsvLine)
+  const hasHeader = /name|team|question|prompt/i.test(parsedRows[0]?.[0] ?? "")
+  const dataRows = hasHeader ? parsedRows.slice(1) : parsedRows
+
+  return dataRows
+    .map((columns) => (columns[0] ?? "").trim())
+    .filter(Boolean)
+}
+
+type UploadedQuestion = {
+  prompt: string
+  description: string
+  category: string
+  difficulty: string
+  marks: number
+}
+
+function parseQuestionCsv(raw: string): UploadedQuestion[] {
+  const rows = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (rows.length === 0) return []
+
+  const parsedRows = rows.map(parseCsvLine)
+  const header = parsedRows[0].map((cell) => cell.toLowerCase())
+  const hasHeader = header.some((cell) =>
+    ["prompt", "question", "description", "category", "difficulty", "marks"].includes(cell)
+  )
+
+  const indexOf = (candidates: string[]) =>
+    header.findIndex((cell) => candidates.includes(cell))
+
+  const promptIndex = hasHeader ? indexOf(["prompt", "question", "title"]) : 0
+  const descriptionIndex = hasHeader ? indexOf(["description", "details"]) : 1
+  const categoryIndex = hasHeader ? indexOf(["category", "domain"]) : 2
+  const difficultyIndex = hasHeader ? indexOf(["difficulty", "level"]) : 3
+  const marksIndex = hasHeader ? indexOf(["marks", "points", "score"]) : 4
+
+  const dataRows = hasHeader ? parsedRows.slice(1) : parsedRows
+
+  return dataRows
+    .map((columns) => {
+      const prompt = (columns[promptIndex >= 0 ? promptIndex : 0] ?? "").trim()
+      const description = (columns[descriptionIndex >= 0 ? descriptionIndex : 1] ?? "").trim()
+      const category = (columns[categoryIndex >= 0 ? categoryIndex : 2] ?? "General").trim() || "General"
+      const difficulty = (columns[difficultyIndex >= 0 ? difficultyIndex : 3] ?? "Medium").trim() || "Medium"
+      const marksRaw = (columns[marksIndex >= 0 ? marksIndex : 4] ?? "1").trim()
+      const marks = Number.parseInt(marksRaw, 10)
+
+      return {
+        prompt,
+        description,
+        category,
+        difficulty,
+        marks: Number.isFinite(marks) && marks > 0 ? marks : 1,
+      }
+    })
+    .filter((question) => Boolean(question.prompt))
+}
+
 function Btn({
   children,
   variant = "default",
@@ -62,7 +181,6 @@ function Btn({
   )
 }
 
-// ─── Parchment Card ───────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`bg-amber-100 border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden ${className}`}>
@@ -90,7 +208,6 @@ function CardHeader({ icon, title, color = "amber" }: { icon: React.ReactNode; t
   )
 }
 
-// ─── Form helpers ─────────────────────────────────────────────────
 function FormLabel({ children }: { children: React.ReactNode }) {
   return (
     <label className="block font-serif font-bold text-stone-800 text-[10px] uppercase tracking-widest mb-1">
@@ -111,24 +228,86 @@ function TextInput({ value, onChange, placeholder }: { value: string; onChange: 
   )
 }
 
-// ─── Current Session Panel ────────────────────────────────────────
+function SelectInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: Array<{ value: string; label: string }>
+  placeholder?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-4 py-3 bg-white/70 border-2 border-stone-900 font-serif text-stone-800 focus:outline-none rounded-lg cursor-pointer"
+    >
+      <option value="">{placeholder ?? "Select..."}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function CurrentSessionPanel() {
-  const { activeSession, stopSession } = useArena()
+  const { activeSession, remainingTimeMs, addSessionTime, stopSession, teams } = useArena()
 
   return (
     <Card>
       <CardHeader icon={<Clock className="w-6 h-6" />} title="Current Session" color="emerald" />
       <div className="p-5">
         {activeSession ? (
-          <div className="bg-white/50 border-2 border-dashed border-stone-500 rounded-lg p-4">
+          <div className="bg-white/50 border-2 border-dashed border-stone-500 rounded-lg p-4 space-y-3">
             <p className="font-cursive text-2xl text-stone-800">{activeSession.name}</p>
             <p className="text-xs uppercase tracking-widest font-serif font-bold text-emerald-600 mt-1">
               ACTIVE
             </p>
+            <div className="grid grid-cols-2 gap-3 text-xs uppercase tracking-widest font-serif">
+              <div>
+                <p className="text-stone-500">Time Left</p>
+                <p className="text-stone-900 font-bold text-base normal-case tracking-normal">
+                  {formatDuration(remainingTimeMs)}
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-500">Teams</p>
+                <p className="text-stone-900 font-bold text-base normal-case tracking-normal">
+                  {teams.length}
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-500">Questions</p>
+                <p className="text-stone-900 font-bold text-base normal-case tracking-normal">
+                  {activeSession.questions.length}
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-500">Duration</p>
+                <p className="text-stone-900 font-bold text-base normal-case tracking-normal">
+                  {activeSession.durationMinutes} min
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Btn variant="stop" onClick={() => addSessionTime(5)}>
+                <Timer className="w-3 h-3" />
+                +5 MIN
+              </Btn>
+              <Btn variant="stop" onClick={() => addSessionTime(10)}>
+                <Timer className="w-3 h-3" />
+                +10 MIN
+              </Btn>
+            </div>
             <Btn
               variant="stop"
               onClick={() => stopSession(activeSession.id)}
-              className="mt-3"
+              className="mt-1"
             >
               <Square className="w-3 h-3" />
               STOP SESSION
@@ -144,16 +323,123 @@ function CurrentSessionPanel() {
   )
 }
 
-// ─── Create Session Panel ─────────────────────────────────────────
 function CreateSessionPanel() {
   const { createSession } = useArena()
   const [name, setName] = useState("")
+  const [durationMinutes, setDurationMinutes] = useState("45")
+  const [questionsText, setQuestionsText] = useState("Slay Dragon\nFind Relic\nDecode Runes")
+  const [teamsText, setTeamsText] = useState("hinata\nkakashi\nnaruto")
+  const [uploadedQuestions, setUploadedQuestions] = useState<UploadedQuestion[]>([])
+
+  const handleQuestionsCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const text = await file.text()
+    const parsedQuestions = parseQuestionCsv(text)
+    if (parsedQuestions.length > 0) {
+      setUploadedQuestions(parsedQuestions)
+      setQuestionsText(parsedQuestions.map((question) => question.prompt).join("\n"))
+    }
+    event.target.value = ""
+  }
+
+  const handleTeamsCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const text = await file.text()
+    const values = parseCsvFirstColumn(text)
+    if (values.length > 0) {
+      setTeamsText(values.join("\n"))
+    }
+    event.target.value = ""
+  }
 
   const handleCreate = () => {
     if (!name.trim()) return
-    createSession(name)
+    const questionPrompts = questionsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const teamNames = teamsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    if (questionPrompts.length === 0 || teamNames.length === 0) return
+
+    const questionMap = new Map(
+      uploadedQuestions.map((question) => [question.prompt.toLowerCase(), question])
+    )
+    const questions = questionPrompts.map((prompt) => {
+      const uploaded = questionMap.get(prompt.toLowerCase())
+      return {
+        prompt,
+        description: uploaded?.description ?? "",
+        category: uploaded?.category ?? "General",
+        difficulty: uploaded?.difficulty ?? "Medium",
+        marks: uploaded?.marks ?? 1,
+      }
+    })
+
+    createSession({
+      name,
+      durationMinutes: Number.parseInt(durationMinutes, 10) || 45,
+      questions,
+      teamNames,
+    })
     setName("")
+    setDurationMinutes("45")
+    setQuestionsText("")
+    setTeamsText("")
+    setUploadedQuestions([])
   }
+
+  const questionCount = questionsText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean).length
+  const totalMarks = uploadedQuestions.reduce((sum, question) => sum + question.marks, 0)
+
+  const downloadMockQuestionsCsv = () => {
+    const csv = [
+      "prompt,description,category,difficulty,marks",
+      'API Caching Challenge,"Implement stale-while-revalidate cache",Backend,Hard,25',
+      'Responsive Dashboard,"Build adaptive cards and navigation",Frontend,Medium,15',
+      'Regex Log Parser,"Parse mixed-format logs into JSON",Tools,Easy,10',
+    ].join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "mock-questions.csv"
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadMockTeamsCsv = () => {
+    const csv = [
+      "team_name",
+      "Code Raiders",
+      "Bug Hunters",
+      "Stack Masters",
+      "Dev Ninjas",
+    ].join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "mock-teams.csv"
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  const teamCount = teamsText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean).length
 
   return (
     <Card>
@@ -163,10 +449,75 @@ function CreateSessionPanel() {
           <FormLabel>Session Name</FormLabel>
           <TextInput value={name} onChange={setName} placeholder="Spring Sprint" />
         </div>
+        <div>
+          <FormLabel>Duration (Minutes)</FormLabel>
+          <TextInput
+            value={durationMinutes}
+            onChange={setDurationMinutes}
+            placeholder="45"
+          />
+        </div>
+        <div>
+          <FormLabel>Custom Questions (One Per Line)</FormLabel>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <label className="inline-flex items-center justify-center px-3 py-2 text-[11px] uppercase tracking-widest font-serif font-bold border-2 border-stone-800 rounded-lg bg-amber-200 text-stone-800 cursor-pointer hover:-translate-y-0.5 transition-all">
+              Upload Questions CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleQuestionsCsvUpload}
+                className="hidden"
+              />
+            </label>
+            <Btn variant="stop" onClick={downloadMockQuestionsCsv}>
+              DOWNLOAD MOCK QUESTIONS CSV
+            </Btn>
+          </div>
+          <textarea
+            value={questionsText}
+            onChange={(e) => setQuestionsText(e.target.value)}
+            placeholder="Question 1"
+            className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors min-h-24 resize-y"
+          />
+          <p className="mt-1 text-[11px] uppercase tracking-widest font-serif text-stone-500">
+            {questionCount} Questions
+          </p>
+          {uploadedQuestions.length > 0 && (
+            <p className="mt-1 text-[11px] uppercase tracking-widest font-serif text-emerald-700">
+              Total Marks From CSV: {totalMarks}
+            </p>
+          )}
+        </div>
+        <div>
+          <FormLabel>Initial Teams (One Per Line)</FormLabel>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <label className="inline-flex items-center justify-center px-3 py-2 text-[11px] uppercase tracking-widest font-serif font-bold border-2 border-stone-800 rounded-lg bg-amber-200 text-stone-800 cursor-pointer hover:-translate-y-0.5 transition-all">
+              Upload Teams CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleTeamsCsvUpload}
+                className="hidden"
+              />
+            </label>
+            <Btn variant="stop" onClick={downloadMockTeamsCsv}>
+              DOWNLOAD MOCK TEAMS CSV
+            </Btn>
+          </div>
+          <textarea
+            value={teamsText}
+            onChange={(e) => setTeamsText(e.target.value)}
+            placeholder="Team Alpha"
+            className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors min-h-24 resize-y"
+          />
+          <p className="mt-1 text-[11px] uppercase tracking-widest font-serif text-stone-500">
+            {teamCount} Teams
+          </p>
+        </div>
         <Btn
           variant="gold"
           onClick={handleCreate}
-          disabled={!name.trim()}
+          disabled={!name.trim() || questionCount === 0 || teamCount === 0}
           className="w-full py-3"
         >
           CREATE AND ACTIVATE SESSION
@@ -176,39 +527,192 @@ function CreateSessionPanel() {
   )
 }
 
-// ─── Register Team Panel ──────────────────────────────────────────
 function RegisterTeamPanel() {
-  const { registerTeam } = useArena()
-  const [name, setName] = useState("")
+  const {
+    sessions,
+    activeSession,
+    getTeamsBySession,
+    addTeamToSession,
+    addQuestionToSession,
+  } = useArena()
+  const [selectedSessionId, setSelectedSessionId] = useState(activeSession?.id ?? "")
+  const [teamName, setTeamName] = useState("")
+  const [questionPrompt, setQuestionPrompt] = useState("")
+  const [questionDescription, setQuestionDescription] = useState("")
+  const [questionCategory, setQuestionCategory] = useState("General")
+  const [questionDifficulty, setQuestionDifficulty] = useState("Medium")
+  const [questionMarks, setQuestionMarks] = useState("1")
 
-  const handleSubmit = () => {
-    if (!name.trim()) return
-    registerTeam(name)
-    setName("")
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
+  const selectedSessionTeams = selectedSession ? getTeamsBySession(selectedSession.id) : []
+  const selectedSessionQuestions = selectedSession?.questions ?? []
+
+  const sessionOptions = sessions
+    .slice()
+    .reverse()
+    .map((session) => ({
+      value: session.id,
+      label: `${session.name} (${session.id})`,
+    }))
+
+  const handleAddTeam = () => {
+    if (!selectedSessionId || !teamName.trim()) return
+    const added = addTeamToSession(selectedSessionId, teamName)
+    if (added) {
+      setTeamName("")
+    }
+  }
+
+  const handleAddQuestion = () => {
+    if (!selectedSessionId || !questionPrompt.trim()) return
+
+    const added = addQuestionToSession(selectedSessionId, {
+      prompt: questionPrompt,
+      description: questionDescription,
+      category: questionCategory,
+      difficulty: questionDifficulty,
+      marks: Number.parseInt(questionMarks, 10) || 1,
+    })
+
+    if (added) {
+      setQuestionPrompt("")
+      setQuestionDescription("")
+      setQuestionCategory("General")
+      setQuestionDifficulty("Medium")
+      setQuestionMarks("1")
+    }
+  }
+
+  const handleAddTeamsCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedSessionId) return
+
+    const text = await file.text()
+    const names = parseCsvFirstColumn(text)
+    names.forEach((name) => {
+      addTeamToSession(selectedSessionId, name)
+    })
+    event.target.value = ""
+  }
+
+  const handleAddQuestionsCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedSessionId) return
+
+    const text = await file.text()
+    const questions = parseQuestionCsv(text)
+    questions.forEach((question) => {
+      addQuestionToSession(selectedSessionId, question)
+    })
+    event.target.value = ""
   }
 
   return (
     <Card>
-      <CardHeader icon={<Users className="w-6 h-6" />} title="Register Team" color="amber" />
+      <CardHeader icon={<Users className="w-6 h-6" />} title="Session Content Manager" color="amber" />
       <div className="p-5 space-y-4">
         <div>
-          <FormLabel>Team Name</FormLabel>
-          <TextInput value={name} onChange={setName} placeholder="Neon Kraken Squad" />
+          <FormLabel>Select Session</FormLabel>
+          <SelectInput
+            value={selectedSessionId}
+            onChange={setSelectedSessionId}
+            options={sessionOptions}
+            placeholder="Choose Session ID"
+          />
+          {selectedSession && (
+            <p className="mt-2 text-[11px] uppercase tracking-widest font-serif text-stone-600">
+              Session ID: {selectedSession.id}
+            </p>
+          )}
         </div>
-        <Btn
-          variant="gold"
-          onClick={handleSubmit}
-          disabled={!name.trim()}
-          className="w-full py-3"
-        >
-          REGISTER TEAM
-        </Btn>
+
+        <div className="border-2 border-dashed border-stone-400 rounded-lg p-3 space-y-3 bg-white/40">
+          <FormLabel>Add Team To Selected Session</FormLabel>
+          <TextInput value={teamName} onChange={setTeamName} placeholder="Neon Kraken Squad" />
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              variant="gold"
+              onClick={handleAddTeam}
+              disabled={!selectedSessionId || !teamName.trim()}
+              className="w-auto"
+            >
+              ADD TEAM
+            </Btn>
+            <label className="inline-flex items-center justify-center px-3 py-2 text-[11px] uppercase tracking-widest font-serif font-bold border-2 border-stone-800 rounded-lg bg-amber-200 text-stone-800 cursor-pointer hover:-translate-y-0.5 transition-all">
+              Upload Teams CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleAddTeamsCsv}
+                className="hidden"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="border-2 border-dashed border-stone-400 rounded-lg p-3 space-y-3 bg-white/40">
+          <FormLabel>Add Question To Selected Session</FormLabel>
+          <TextInput value={questionPrompt} onChange={setQuestionPrompt} placeholder="Question prompt" />
+          <TextInput value={questionDescription} onChange={setQuestionDescription} placeholder="Question description" />
+          <div className="grid grid-cols-3 gap-2">
+            <TextInput value={questionCategory} onChange={setQuestionCategory} placeholder="Category" />
+            <TextInput value={questionDifficulty} onChange={setQuestionDifficulty} placeholder="Difficulty" />
+            <TextInput value={questionMarks} onChange={setQuestionMarks} placeholder="Marks" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              variant="gold"
+              onClick={handleAddQuestion}
+              disabled={!selectedSessionId || !questionPrompt.trim()}
+              className="w-auto"
+            >
+              ADD QUESTION
+            </Btn>
+            <label className="inline-flex items-center justify-center px-3 py-2 text-[11px] uppercase tracking-widest font-serif font-bold border-2 border-stone-800 rounded-lg bg-amber-200 text-stone-800 cursor-pointer hover:-translate-y-0.5 transition-all">
+              Upload Questions CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleAddQuestionsCsv}
+                className="hidden"
+              />
+            </label>
+          </div>
+        </div>
+
+        {selectedSession && (
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-white/60 border-2 border-dashed border-stone-400 rounded-lg p-3">
+              <p className="text-[11px] uppercase tracking-widest font-serif text-stone-600 mb-2">
+                Teams in Session ({selectedSessionTeams.length})
+              </p>
+              <div className="max-h-40 overflow-auto space-y-1">
+                {selectedSessionTeams.map((team) => (
+                  <p key={team.id} className="font-serif text-sm text-stone-800">
+                    {team.name}
+                  </p>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white/60 border-2 border-dashed border-stone-400 rounded-lg p-3">
+              <p className="text-[11px] uppercase tracking-widest font-serif text-stone-600 mb-2">
+                Questions in Session ({selectedSessionQuestions.length})
+              </p>
+              <div className="max-h-40 overflow-auto space-y-1">
+                {selectedSessionQuestions.map((question) => (
+                  <p key={question.id} className="font-serif text-sm text-stone-800">
+                    {question.prompt} ({question.marks} pts)
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   )
 }
 
-// ─── Active Roster Panel ──────────────────────────────────────────
 function ActiveRosterPanel() {
   const { teams, deleteTeam } = useArena()
 
@@ -242,7 +746,6 @@ function ActiveRosterPanel() {
   )
 }
 
-// ─── Session History Panel ────────────────────────────────────────
 function SessionHistoryPanel() {
   const { sessions, stopSession } = useArena()
 
@@ -260,6 +763,12 @@ function SessionHistoryPanel() {
             <div key={session.id} className="flex items-center justify-between py-3 px-2">
               <span className="font-cursive text-xl text-stone-800">{session.name}</span>
               <div className="flex items-center gap-4 ml-auto">
+                <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
+                  ID {session.id}
+                </span>
+                <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
+                  {session.durationMinutes} MIN
+                </span>
                 <span
                   className={`text-[10px] uppercase tracking-widest font-serif font-bold ${
                     session.status === "Active" ? "text-emerald-600" : "text-stone-500"
@@ -282,7 +791,6 @@ function SessionHistoryPanel() {
   )
 }
 
-// ─── Mission Control Identity Card ────────────────────────────────
 function MissionControlCard() {
   return (
     <Card className="mb-8">
@@ -304,11 +812,9 @@ function MissionControlCard() {
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────
 export default function AdminPage() {
   return (
     <FantasyBackground>
-      {/* Header Strip — matches home/coordinator pages */}
       <header className="sticky top-0 z-40 bg-stone-800 border-b-4 border-stone-900 shadow-[0_4px_0_rgba(0,0,0,0.3)]">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/">
@@ -342,33 +848,26 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-5xl mx-auto px-4 py-8 pb-24 space-y-6">
-        {/* Mission Control Identity Card */}
         <MissionControlCard />
 
-        {/* Current Session + Create Session */}
         <div className="grid md:grid-cols-2 gap-6">
           <CurrentSessionPanel />
           <CreateSessionPanel />
         </div>
 
-        {/* Register Team + Active Roster */}
         <div className="grid md:grid-cols-2 gap-6">
           <RegisterTeamPanel />
           <ActiveRosterPanel />
         </div>
 
-        {/* Session History (full width) */}
         <SessionHistoryPanel />
       </main>
 
-      {/* CTRL Badge — top right corner */}
       <div className="fixed top-20 right-4 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-amber-600 to-orange-700 border-4 border-stone-900 flex items-center justify-center shadow-[3px_3px_0_rgba(0,0,0,1)]">
         <Settings className="w-6 h-6 text-amber-100" />
       </div>
 
-      {/* Footer Rail */}
       <footer className="fixed bottom-0 left-0 right-0 bg-stone-800 border-t-4 border-stone-900 py-2 px-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center gap-2">
           <Gem className="w-4 h-4 text-teal-400" />
