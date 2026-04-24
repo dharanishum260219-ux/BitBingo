@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
@@ -219,15 +219,32 @@ function SessionSummaryPanel() {
 }
 
 function ControlDeckPanel() {
-  const { teams, challenges, logCompletion, sessions, selectedSessionId } = useArena()
+  const { teams, challenges, logCompletion, sessions, selectedSessionId, isLoading } = useArena()
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
   const [selectedTeam, setSelectedTeam] = useState("")
   const [selectedQuest, setSelectedQuest] = useState("")
   const [proof, setProof] = useState("")
   const [completionDetails, setCompletionDetails] = useState<CompletionDetails | null>(null)
 
+  useEffect(() => {
+    setSelectedTeam("")
+    setSelectedQuest("")
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    if (selectedTeam && !teams.some((team) => team.name === selectedTeam)) {
+      setSelectedTeam("")
+    }
+  }, [selectedTeam, teams])
+
+  useEffect(() => {
+    if (selectedQuest && !challenges.some((challenge) => challenge.title === selectedQuest)) {
+      setSelectedQuest("")
+    }
+  }, [challenges, selectedQuest])
+
   const handleStamp = async () => {
-    if (!selectedTeam || !selectedQuest || !selectedSessionId) return
+    if (!selectedTeam || !selectedQuest || !selectedSessionId || isLoading) return
     const team = teams.find((t) => t.name === selectedTeam)
     const challenge = challenges.find((entry) => entry.title === selectedQuest)
 
@@ -296,7 +313,7 @@ function ControlDeckPanel() {
             <Btn
               variant="stamp"
               onClick={handleStamp}
-              disabled={!selectedTeam || !selectedQuest || !selectedSessionId}
+              disabled={!selectedTeam || !selectedQuest || !selectedSessionId || isLoading}
             >
               <Stamp className="w-6 h-6" />
               STAMP COMPLETION

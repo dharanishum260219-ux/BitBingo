@@ -13,7 +13,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "participantId, challengeId, and sessionId are required" }, { status: 400 })
   }
 
-  await logCompletion({ participantId, challengeId, proofUrl, sessionId })
+  try {
+    await logCompletion({ participantId, challengeId, proofUrl, sessionId })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to log completion"
+    if (
+      message.includes("Team does not belong to selected session") ||
+      message.includes("Challenge is not mapped to selected session") ||
+      message.includes("Missing participant or selected session")
+    ) {
+      return Response.json({ error: message }, { status: 400 })
+    }
+
+    return Response.json({ error: message }, { status: 500 })
+  }
   revalidatePath("/")
   revalidatePath("/coordinator")
   revalidatePath("/admin")
