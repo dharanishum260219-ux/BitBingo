@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
@@ -257,6 +257,11 @@ function SelectInput({
 
 function CurrentSessionPanel() {
   const { activeSession, remainingTimeMs, addSessionTime, stopSession, teams } = useArena()
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   return (
     <Card>
@@ -272,7 +277,7 @@ function CurrentSessionPanel() {
               <div>
                 <p className="text-stone-500">Time Left</p>
                 <p className="text-stone-900 font-bold text-base normal-case tracking-normal">
-                  {formatDuration(remainingTimeMs)}
+                  {isMounted ? formatDuration(remainingTimeMs) : "--:--"}
                 </p>
               </div>
               <div>
@@ -714,19 +719,50 @@ function RegisterTeamPanel() {
 }
 
 function ActiveRosterPanel() {
-  const { teams, deleteTeam } = useArena()
+  const { sessions, activeSession, getTeamsBySession, deleteTeam } = useArena()
+  const [selectedSessionId, setSelectedSessionId] = useState("")
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return
+    }
+
+    if (activeSession) {
+      setSelectedSessionId(activeSession.id)
+      return
+    }
+
+    if (sessions.length > 0) {
+      setSelectedSessionId(sessions[0].id)
+    }
+  }, [activeSession, selectedSessionId, sessions])
+
+  const rosterTeams = selectedSessionId ? getTeamsBySession(selectedSessionId) : []
+  const sessionOptions = sessions.map((session) => ({
+    value: session.id,
+    label: `${session.name} (${session.id})`,
+  }))
 
   return (
     <Card>
       <CardHeader icon={<Trophy className="w-6 h-6" />} title="Active Roster" color="amber" />
       <div className="p-4">
-        {teams.length === 0 && (
+        <div className="mb-4">
+          <FormLabel>Manage Session Roster</FormLabel>
+          <SelectInput
+            value={selectedSessionId}
+            onChange={setSelectedSessionId}
+            options={sessionOptions}
+            placeholder="Select Session"
+          />
+        </div>
+        {rosterTeams.length === 0 && (
           <p className="text-center font-serif text-stone-500 py-4 text-sm">
-            No teams registered yet.
+            No teams registered for this session yet.
           </p>
         )}
         <div className="flex flex-col divide-y divide-dashed divide-stone-400">
-          {teams.map((team) => (
+          {rosterTeams.map((team) => (
             <div key={team.id} className="flex items-center justify-between py-3 px-2">
               <span className="font-cursive text-xl text-stone-800">{team.name}</span>
               <div className="flex items-center gap-3 ml-auto">
@@ -802,10 +838,15 @@ function MissionControlCard() {
               Session and Roster Management
             </p>
           </div>
-          <Btn variant="default">
-            <LogOut className="w-4 h-4" />
-            SIGN OUT
-          </Btn>
+          <form action="/admin/logout" method="post">
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 border-2 rounded-lg px-4 py-2 transition-all cursor-pointer border-[#7a6130] bg-gradient-to-b from-[#e8d48a] to-[#c9a84c] text-[#3d2b00] shadow-[0_3px_0_#7a6130] hover:shadow-[0_4px_0_#7a6130] font-serif font-bold"
+            >
+              <LogOut className="w-4 h-4" />
+              SIGN OUT
+            </button>
+          </form>
         </div>
       </div>
     </Card>

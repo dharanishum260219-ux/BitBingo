@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
@@ -237,18 +237,37 @@ function SessionSummaryPanel() {
 }
 
 function CrewRegistrationPanel() {
-  const { registerTeam, activeSession } = useArena()
+  const { sessions, activeSession, addTeamToSession } = useArena()
   const [name, setName] = useState("")
   const [station, setStation] = useState("")
+  const [selectedSessionId, setSelectedSessionId] = useState("")
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return
+    }
+
+    if (activeSession) {
+      setSelectedSessionId(activeSession.id)
+      return
+    }
+
+    if (sessions.length > 0) {
+      setSelectedSessionId(sessions[0].id)
+    }
+  }, [activeSession, selectedSessionId, sessions])
 
   const handleRegister = () => {
-    if (!name.trim()) return
-    const added = registerTeam(name, station)
+    if (!name.trim() || !selectedSessionId) return
+    const added = addTeamToSession(selectedSessionId, name, station)
     if (added) {
       setName("")
       setStation("")
     }
   }
+
+  const sessionOptions = sessions.map((session) => session.id)
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId)
 
   return (
     <Card className="mb-8">
@@ -256,6 +275,20 @@ function CrewRegistrationPanel() {
       <div className="p-6">
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-4">
+            <div>
+              <FormLabel>Select Session</FormLabel>
+              <SelectInput
+                value={selectedSessionId}
+                onChange={setSelectedSessionId}
+                options={sessionOptions}
+                placeholder="Select Session"
+              />
+              {selectedSession && (
+                <p className="mt-1 text-xs font-sans text-stone-600">
+                  {selectedSession.name}
+                </p>
+              )}
+            </div>
             <div>
               <FormLabel>Team Name</FormLabel>
               <TextInput value={name} onChange={setName} placeholder="e.g., Dragon Slayers" />
@@ -269,7 +302,7 @@ function CrewRegistrationPanel() {
             <Btn
               variant="gold"
               onClick={handleRegister}
-              disabled={!name.trim() || !activeSession}
+              disabled={!name.trim() || !selectedSessionId}
               className="w-full py-4 text-base"
             >
               Register Crew
@@ -279,7 +312,7 @@ function CrewRegistrationPanel() {
         <div className="mt-4 p-3 bg-orange-50 border-l-4 border-orange-600 flex gap-2">
           <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm font-sans text-stone-700">
-            Each team must register their station before completing quests.
+            Each team is linked to the selected session and must register a station before completing quests.
           </p>
         </div>
       </div>
@@ -288,17 +321,51 @@ function CrewRegistrationPanel() {
 }
 
 function ActiveRosterPanel() {
-  const { teams, deleteTeam } = useArena()
+  const { sessions, activeSession, getTeamsBySession, deleteTeam } = useArena()
+  const [selectedSessionId, setSelectedSessionId] = useState("")
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      return
+    }
+
+    if (activeSession) {
+      setSelectedSessionId(activeSession.id)
+      return
+    }
+
+    if (sessions.length > 0) {
+      setSelectedSessionId(sessions[0].id)
+    }
+  }, [activeSession, selectedSessionId, sessions])
+
+  const rosterTeams = selectedSessionId ? getTeamsBySession(selectedSessionId) : []
+  const sessionOptions = sessions.map((session) => session.id)
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId)
 
   return (
     <Card className="mb-8">
       <CardHeader icon={<Trophy className="w-6 h-6" />} title="Active Roster" color="amber" />
       <div className="p-4">
-        {teams.length === 0 && (
-          <p className="text-center font-sans text-stone-500 py-4 text-sm">No teams registered yet.</p>
+        <div className="mb-4">
+          <FormLabel>Manage Session Roster</FormLabel>
+          <SelectInput
+            value={selectedSessionId}
+            onChange={setSelectedSessionId}
+            options={sessionOptions}
+            placeholder="Select Session"
+          />
+          {selectedSession && (
+            <p className="mt-1 text-xs font-sans text-stone-600">
+              {selectedSession.name}
+            </p>
+          )}
+        </div>
+        {rosterTeams.length === 0 && (
+          <p className="text-center font-sans text-stone-500 py-4 text-sm">No teams registered for this session yet.</p>
         )}
         <div className="flex flex-col divide-y divide-dashed divide-stone-400">
-          {teams.map((team) => (
+          {rosterTeams.map((team) => (
             <div key={team.id} className="flex items-center justify-between py-3 px-2">
               <span className="font-cursive text-xl text-stone-800">{team.name}</span>
               <div className="flex items-center gap-3 ml-auto">

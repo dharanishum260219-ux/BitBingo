@@ -1,0 +1,15 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+frontend
+client
+backend/.venv
+backend/__pycache__
+backend/bitbingo.db
+*.local
+.env*
