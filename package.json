@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:check": "npm run lint && npm run build",
+    "preflight:deploy": "node scripts/deploy-preflight.mjs",
+    "deploy:preflight": "npm run preflight:deploy",
+    "deploy:check": "npm run deploy:preflight && npm run build:check"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",

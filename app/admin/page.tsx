@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
@@ -18,6 +18,118 @@ import {
   Square,
   Trash2,
 } from "lucide-react"
+
+interface ParsedQuestionRow {
+  title: string
+  description: string
+  difficulty: string
+  points?: number | null
+}
+
+function parseCsvText(input: string) {
+  const rows: string[][] = []
+  let current = ""
+  let row: string[] = []
+  let inQuotes = false
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i]
+    const nextChar = input[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(current.trim())
+      current = ""
+      continue
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") {
+        i += 1
+      }
+      row.push(current.trim())
+      current = ""
+
+      if (row.some((cell) => cell.length > 0)) {
+        rows.push(row)
+      }
+      row = []
+      continue
+    }
+
+    current += char
+  }
+
+  if (current.length > 0 || row.length > 0) {
+    row.push(current.trim())
+    if (row.some((cell) => cell.length > 0)) {
+      rows.push(row)
+    }
+  }
+
+  return rows
+}
+
+function parseTeamsCsv(input: string) {
+  const rows = parseCsvText(input)
+  if (rows.length === 0) return []
+
+  const header = rows[0].map((cell) => cell.toLowerCase())
+  const nameIdx = header.findIndex((cell) => cell === "name" || cell === "team" || cell === "team_name")
+
+  if (nameIdx >= 0) {
+    return rows
+      .slice(1)
+      .map((row) => row[nameIdx]?.trim() ?? "")
+      .filter(Boolean)
+  }
+
+  return rows
+    .map((row) => row[0]?.trim() ?? "")
+    .filter(Boolean)
+}
+
+function parseQuestionsCsv(input: string): ParsedQuestionRow[] {
+  const rows = parseCsvText(input)
+  if (rows.length === 0) return []
+
+  const header = rows[0].map((cell) => cell.toLowerCase())
+  const titleIdx = header.findIndex((cell) => cell === "title")
+  const descriptionIdx = header.findIndex((cell) => cell === "description")
+  const difficultyIdx = header.findIndex((cell) => cell === "difficulty")
+  const pointsIdx = header.findIndex((cell) => cell === "points")
+
+  if (titleIdx < 0 || descriptionIdx < 0 || difficultyIdx < 0) {
+    throw new Error("Questions CSV must include title, description, difficulty headers")
+  }
+
+  return rows
+    .slice(1)
+    .map((row) => {
+      const title = row[titleIdx]?.trim() ?? ""
+      const description = row[descriptionIdx]?.trim() ?? ""
+      const difficulty = row[difficultyIdx]?.trim() ?? ""
+      const pointsRaw = pointsIdx >= 0 ? row[pointsIdx] : ""
+      const points = typeof pointsRaw === "string" && pointsRaw.trim() ? Number(pointsRaw.trim()) : null
+
+      return {
+        title,
+        description,
+        difficulty,
+        points: Number.isFinite(points) && Number(points) > 0 ? Number(points) : null,
+      }
+    })
+    .filter((row) => row.title && row.description && row.difficulty)
+}
 
 function Btn({
   children,
@@ -108,21 +220,22 @@ function TextInput({ value, onChange, placeholder }: { value: string; onChange: 
 }
 
 function CurrentSessionPanel() {
-  const { activeSession, stopSession } = useArena()
+  const { sessions, selectedSessionId, stopSession } = useArena()
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
 
   return (
     <Card>
       <CardHeader icon={<Clock className="w-6 h-6" />} title="Current Session" color="emerald" />
       <div className="p-5">
-        {activeSession ? (
+        {selectedSession ? (
           <div className="bg-white/50 border-2 border-dashed border-stone-500 rounded-lg p-4">
-            <p className="font-cursive text-2xl text-stone-800">{activeSession.name}</p>
+            <p className="font-cursive text-2xl text-stone-800">{selectedSession.name}</p>
             <p className="text-xs uppercase tracking-widest font-serif font-bold text-emerald-600 mt-1">
-              ACTIVE
+              SELECTED
             </p>
             <Btn
               variant="stop"
-              onClick={() => void stopSession(activeSession.id)}
+              onClick={() => void stopSession(selectedSession.id)}
               className="mt-3"
             >
               <Square className="w-3 h-3" />
@@ -131,7 +244,7 @@ function CurrentSessionPanel() {
           </div>
         ) : (
           <div className="bg-white/50 border-2 border-dashed border-stone-400 rounded-lg p-4">
-            <p className="font-serif text-stone-500 text-sm">No active session.</p>
+            <p className="font-serif text-stone-500 text-sm">Select a session to manage.</p>
           </div>
         )}
       </div>
@@ -142,11 +255,104 @@ function CurrentSessionPanel() {
 function CreateSessionPanel() {
   const { createSession } = useArena()
   const [name, setName] = useState("")
+  const [durationMinutes, setDurationMinutes] = useState(45)
+  const [teamNamesText, setTeamNamesText] = useState("")
+  const [challengePool, setChallengePool] = useState<Array<{ id: number; title: string; description: string; difficulty: string; points: number }>>([])
+  const [selectedChallengeIds, setSelectedChallengeIds] = useState<number[]>([])
+  const [teamCsvNames, setTeamCsvNames] = useState<string[]>([])
+  const [questionCsvRows, setQuestionCsvRows] = useState<ParsedQuestionRow[]>([])
+  const [csvError, setCsvError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadChallengePool = async () => {
+      const response = await fetch("/api/arena/challenges", { cache: "no-store" })
+      if (!response.ok) return
+
+      const data = (await response.json().catch(() => null)) as {
+        challenges?: Array<{ id: number; title: string; description: string; difficulty: string; points: number }>
+      } | null
+
+      if (!mounted || !data?.challenges) return
+
+      setChallengePool(data.challenges)
+      if (selectedChallengeIds.length === 0) {
+        setSelectedChallengeIds(data.challenges.slice(0, 25).map((entry) => entry.id))
+      }
+    }
+
+    void loadChallengePool()
+    return () => {
+      mounted = false
+    }
+  }, [selectedChallengeIds.length])
+
+  const toggleChallenge = (challengeId: number) => {
+    setSelectedChallengeIds((prev) => {
+      if (prev.includes(challengeId)) {
+        return prev.filter((entry) => entry !== challengeId)
+      }
+      return [...prev, challengeId]
+    })
+  }
+
+  const handleTeamCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const parsed = parseTeamsCsv(text)
+      setTeamCsvNames(parsed)
+      setCsvError(null)
+    } catch {
+      setCsvError("Failed to parse teams CSV file")
+    } finally {
+      event.target.value = ""
+    }
+  }
+
+  const handleQuestionCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const parsed = parseQuestionsCsv(text)
+      setQuestionCsvRows(parsed)
+      setCsvError(null)
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : "Failed to parse questions CSV file")
+    } finally {
+      event.target.value = ""
+    }
+  }
 
   const handleCreate = async () => {
     if (!name.trim()) return
-    await createSession(name)
+
+    const teamNames = teamNamesText
+      .split(/[,\n]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+
+
+    const mergedTeamNames = Array.from(new Set([...teamNames, ...teamCsvNames]))
+    await createSession({
+      name,
+      durationMinutes,
+      challengeIds: selectedChallengeIds,
+      teamNames: mergedTeamNames,
+      questionRows: questionCsvRows,
+    })
+
     setName("")
+    setDurationMinutes(45)
+    setTeamNamesText("")
+    setTeamCsvNames([])
+    setQuestionCsvRows([])
+    setCsvError(null)
   }
 
   return (
@@ -157,13 +363,82 @@ function CreateSessionPanel() {
           <FormLabel>Session Name</FormLabel>
           <TextInput value={name} onChange={setName} placeholder="Spring Sprint" />
         </div>
+        <div>
+          <FormLabel>Session Duration (Minutes)</FormLabel>
+          <input
+            type="number"
+            min={1}
+            value={durationMinutes}
+            onChange={(event) => setDurationMinutes(Number(event.target.value || 0))}
+            className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 focus:outline-none focus:bg-amber-100/70 transition-colors"
+          />
+        </div>
+        <div>
+          <FormLabel>Initial Teams (Comma or Newline Separated)</FormLabel>
+          <textarea
+            value={teamNamesText}
+            onChange={(event) => setTeamNamesText(event.target.value)}
+            placeholder="Team Alpha, Team Beta"
+            className="w-full min-h-20 resize-y px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors"
+          />
+          <div className="mt-3 rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
+            <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Teams CSV Upload</label>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleTeamCsvUpload(event)}
+              className="mt-2 w-full text-sm"
+            />
+            <p className="mt-2 font-serif text-xs text-stone-600">
+              CSV headers supported: name, team, or team_name. Parsed teams: {teamCsvNames.length}
+            </p>
+          </div>
+        </div>
+        <div>
+          <FormLabel>Questions For This Session ({selectedChallengeIds.length} selected)</FormLabel>
+          <div className="mb-3 rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
+            <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Questions CSV Upload</label>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleQuestionCsvUpload(event)}
+              className="mt-2 w-full text-sm"
+            />
+            <p className="mt-2 font-serif text-xs text-stone-600">
+              Required headers: title, description, difficulty. Optional: points. Parsed questions: {questionCsvRows.length}
+            </p>
+          </div>
+          <div className="max-h-52 overflow-y-auto rounded-lg border-2 border-stone-900 bg-white/60 p-2">
+            {challengePool.map((challenge) => (
+              <label key={challenge.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-amber-50">
+                <input
+                  type="checkbox"
+                  checked={selectedChallengeIds.includes(challenge.id)}
+                  onChange={() => toggleChallenge(challenge.id)}
+                />
+                <span className="font-serif text-sm text-stone-800">{challenge.title} ({challenge.difficulty}, {challenge.points} pts)</span>
+              </label>
+            ))}
+            {challengePool.length === 0 && (
+              <p className="px-2 py-1 font-serif text-sm text-stone-500">No challenges available.</p>
+            )}
+          </div>
+          <p className="mt-1 font-serif text-xs text-stone-600">
+            If fewer than 25 are selected, remaining slots are auto-filled from the global pool.
+          </p>
+        </div>
+        {csvError && (
+          <p className="rounded-lg border-2 border-red-700 bg-red-100 px-3 py-2 font-serif text-xs text-red-700">
+            {csvError}
+          </p>
+        )}
         <Btn
           variant="gold"
           onClick={handleCreate}
-          disabled={!name.trim()}
+          disabled={!name.trim() || durationMinutes <= 0}
           className="w-full py-3"
         >
-          CREATE AND ACTIVATE SESSION
+          CREATE SESSION WITH SETUP
         </Btn>
       </div>
     </Card>
@@ -171,12 +446,12 @@ function CreateSessionPanel() {
 }
 
 function RegisterTeamPanel() {
-  const { registerTeam } = useArena()
+  const { registerTeam, selectedSessionId } = useArena()
   const [name, setName] = useState("")
 
   const handleSubmit = async () => {
-    if (!name.trim()) return
-    await registerTeam(name)
+    if (!name.trim() || !selectedSessionId) return
+    await registerTeam(name, selectedSessionId)
     setName("")
   }
 
@@ -191,7 +466,7 @@ function RegisterTeamPanel() {
         <Btn
           variant="gold"
           onClick={handleSubmit}
-          disabled={!name.trim()}
+          disabled={!name.trim() || !selectedSessionId}
           className="w-full py-3"
         >
           REGISTER TEAM
@@ -202,7 +477,7 @@ function RegisterTeamPanel() {
 }
 
 function ActiveRosterPanel() {
-  const { teams, deleteTeam } = useArena()
+  const { teams, deleteTeam, selectedSessionId } = useArena()
 
   return (
     <Card>
@@ -221,7 +496,7 @@ function ActiveRosterPanel() {
                 <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
                   {team.score} PTS
                 </span>
-                <Btn variant="stop" onClick={() => void deleteTeam(team.id)}>
+                <Btn variant="stop" onClick={() => void deleteTeam(team.id)} disabled={!selectedSessionId}>
                   <Trash2 className="w-3 h-3" />
                   DELETE TEAM
                 </Btn>
@@ -274,15 +549,29 @@ function SessionHistoryPanel() {
 }
 
 function MissionControlCard() {
+  const { sessions, selectedSessionId, selectSession } = useArena()
+
   return (
     <Card className="mb-8">
       <CardHeader icon={<Shield className="w-6 h-6" />} title="Mission Control" color="amber" />
       <div className="p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="w-full sm:max-w-xs">
             <p className="text-[10px] uppercase tracking-widest font-serif text-stone-600">
               Session and Roster Management
             </p>
+            <select
+              value={selectedSessionId ?? ""}
+              onChange={(event) => selectSession(event.target.value)}
+              className="mt-2 w-full rounded-lg border-2 border-stone-900 bg-white px-3 py-2 font-serif text-stone-900"
+            >
+              {sessions.length === 0 && <option value="">No sessions available</option>}
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.name}
+                </option>
+              ))}
+            </select>
           </div>
           <Btn variant="default" className="w-full sm:w-auto">
             <LogOut className="w-4 h-4" />

@@ -83,18 +83,6 @@ function FormLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TextInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-sans text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors"
-    />
-  )
-}
-
 function SelectInput({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; options: string[]; placeholder?: string }) {
   return (
     <select
@@ -180,16 +168,32 @@ function CompletionPopup({ details, onClose }: { details: CompletionDetails | nu
 }
 
 function SessionSummaryPanel() {
-  const { activeSession, teams } = useArena()
+  const { sessions, selectedSessionId, selectSession, teams } = useArena()
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
 
   return (
     <Card className="mb-8">
-      <CardHeader icon={<Zap className="w-6 h-6" />} title="Active Session Summary" color="emerald" />
+      <CardHeader icon={<Zap className="w-6 h-6" />} title="Session Summary" color="emerald" />
       <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="sm:col-span-2 md:col-span-4">
+          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Select Session</p>
+          <select
+            value={selectedSessionId ?? ""}
+            onChange={(event) => selectSession(event.target.value)}
+            className="mt-1 w-full rounded-lg border-2 border-stone-900 bg-white px-3 py-2 font-sans text-stone-900"
+          >
+            {sessions.length === 0 && <option value="">No sessions available</option>}
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
           <p className="font-sans text-lg font-bold text-stone-900">
-            {activeSession ? activeSession.name : "-"}
+            {selectedSession ? selectedSession.name : "-"}
           </p>
         </div>
         <div>
@@ -203,9 +207,9 @@ function SessionSummaryPanel() {
         <div>
           <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Status</p>
           <div className="flex items-center gap-2 mt-1">
-            <div className={`w-3 h-3 rounded-full ${activeSession ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
-            <span className={`font-sans font-bold text-sm ${activeSession ? "text-emerald-700" : "text-stone-500"}`}>
-              {activeSession ? "LIVE" : "INACTIVE"}
+            <div className={`w-3 h-3 rounded-full ${selectedSession ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
+            <span className={`font-sans font-bold text-sm ${selectedSession ? "text-emerald-700" : "text-stone-500"}`}>
+              {selectedSession ? "SELECTED" : "INACTIVE"}
             </span>
           </div>
         </div>
@@ -215,14 +219,15 @@ function SessionSummaryPanel() {
 }
 
 function ControlDeckPanel() {
-  const { teams, challenges, logCompletion, activeSession } = useArena()
+  const { teams, challenges, logCompletion, sessions, selectedSessionId } = useArena()
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
   const [selectedTeam, setSelectedTeam] = useState("")
   const [selectedQuest, setSelectedQuest] = useState("")
   const [proof, setProof] = useState("")
   const [completionDetails, setCompletionDetails] = useState<CompletionDetails | null>(null)
 
   const handleStamp = async () => {
-    if (!selectedTeam || !selectedQuest) return
+    if (!selectedTeam || !selectedQuest || !selectedSessionId) return
     const team = teams.find((t) => t.name === selectedTeam)
     const challenge = challenges.find((entry) => entry.title === selectedQuest)
 
@@ -231,12 +236,13 @@ function ControlDeckPanel() {
         participantId: team.id,
         challengeId: challenge.id,
         proofUrl: proof.trim() || null,
+        sessionId: selectedSessionId,
       })
       setCompletionDetails({
         team: selectedTeam,
         quest: selectedQuest,
         proof: proof.trim(),
-        session: activeSession?.name ?? "No Active Session",
+        session: selectedSession?.name ?? "No Session Selected",
         stampedAt: new Date().toLocaleString(),
         newScore: team.score + challenge.points,
       })
@@ -290,7 +296,7 @@ function ControlDeckPanel() {
             <Btn
               variant="stamp"
               onClick={handleStamp}
-              disabled={!selectedTeam || !selectedQuest}
+              disabled={!selectedTeam || !selectedQuest || !selectedSessionId}
             >
               <Stamp className="w-6 h-6" />
               STAMP COMPLETION

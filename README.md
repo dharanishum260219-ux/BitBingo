@@ -1,68 +1,76 @@
-# BitBingo – Explorer's Chart Edition
+# BitBingo
 
-A real-time event management web application for live coding competitions, styled with a vintage cartography aesthetic.
+BitBingo is a Next.js 16 App Router application for running coding challenge sessions with:
+
+- session-scoped boards
+- team registration and leaderboard tracking
+- completion stamping from a coordinator console
+- admin setup with optional CSV imports for teams and questions
+
+## Active App Location
+
+The deployable app is the repository root.
+
+The previous duplicate app has been archived under `archive/frontend` and is not part of the deployment pipeline.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 (App Router), React, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL, Realtime, Storage)
-- **Fonts**: [Playfair Display](https://fonts.google.com/specimen/Playfair+Display) (serif UI) + [Caveat](https://fonts.google.com/specimen/Caveat) (cursive participant names), loaded via Google Fonts `<link>` tag in the root layout
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- Supabase (Postgres)
+- Tailwind CSS
 
-## Features
+## Local Development
 
-- 🗺 **Treasure Map** – 5×5 Bingo grid of coding challenges; completed tiles are stamped with a bold red SVG "X"
-- ⚓ **Bounty Board** – Real-time leaderboard showing participants sorted by score
-- 📜 **Captain's Log** – Coordinator portal to log completions with camera-enabled photo proof upload to Supabase Storage
-- ⭐ **X Marks the Spot** – Center tile challenge: circle printing via coordinate geometry
-- Live updates via Supabase Realtime on `participants` and `completions` tables
-
-## Getting Started
-
-### 1. Configure Supabase
-
-```bash
-cp .env.local.example .env.local
-# Edit .env.local with your Supabase project URL, anon key, and service role key
-```
-
-### 2. Run the database migration
-
-Execute the SQL in `supabase/migrations/001_schema.sql` in your Supabase SQL editor, then run `supabase/seed.sql` to populate the 25 challenges.
-
-### 3. Start the development server
+1. Install dependencies.
 
 ```bash
 npm install
+```
+
+2. Create local environment file.
+
+```bash
+cp .env.local.example .env.local
+```
+
+3. Set required variables in `.env.local`:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ADMIN_PORTAL_SECRET`
+
+4. Apply database SQL in order:
+
+- `supabase/migrations/001_schema.sql`
+- `supabase/migrations/002_session_scoped_challenges.sql`
+- `supabase/migrations/003_session_duration.sql`
+- `supabase/migrations/004_challenge_metadata.sql`
+- `supabase/seed.sql` (optional if your challenge pool is empty)
+
+5. Run development server.
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the landing page.
+## Deployment Quick Checks
 
-Visit [http://localhost:3000/coordinator](http://localhost:3000/coordinator) for the coordinator portal.
+Run these before deploying:
 
-## Project Structure
-
-```
-app/
-  layout.tsx          # Root layout – Google Fonts link, paper texture
-  globals.css         # Paper background, serif/cursive font rules
-  page.tsx            # Landing page (leaderboard + bingo grid)
-  coordinator/
-    page.tsx          # Coordinator portal (Captain's Log form)
-components/
-  Leaderboard.tsx     # Real-time "Bounty Board" leaderboard
-  BingoGrid.tsx       # Real-time 5×5 "Treasure Map" grid
-  CoordinatorForm.tsx # Completion logging form
-lib/
-  supabase.ts         # Browser Supabase client
-  demo-data.ts        # Fallback challenge data (no Supabase needed)
-types/
-  index.ts            # TypeScript types for DB rows
-supabase/
-  migrations/001_schema.sql  # Tables, RLS, Realtime, Storage bucket
-  seed.sql                   # 25 challenge rows
+```bash
+npm run deploy:preflight
+npm run build:check
 ```
 
-## Deploy on Vercel
+- `deploy:preflight` validates required environment variables.
+- `build:check` runs lint + production build.
 
-Set the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` environment variables in your Vercel project settings, then deploy normally.
+## Health Check
+
+Use `GET /api/health` for deployment smoke tests.
+
+## Full Deployment Guide
+
+See `DEPLOYMENT.md` for complete step-by-step deployment and rollback instructions.

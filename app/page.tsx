@@ -279,9 +279,10 @@ function QuestGrid({ tiles, onTileClick }: { tiles: BoardTile[]; onTileClick: (i
 }
 
 export default function HomeArena() {
-  const { teams, challenges, activeSession, isLoading } = useArena()
+  const { teams, challenges, sessions, selectedSessionId, selectSession, isLoading } = useArena()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedTile, setSelectedTile] = useState<BoardTile | null>(null)
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -305,11 +306,11 @@ export default function HomeArena() {
         completedBy: challenge.completedBy,
         completedAt: challenge.completedAt,
         proofUrl: challenge.proofUrl,
-        sessionName: challenge.sessionName ?? activeSession?.name ?? null,
+        sessionName: challenge.sessionName ?? selectedSession?.name ?? null,
         isFreeSpace: challenge.position === 12,
         icon: questIcons[challenge.position % questIcons.length],
       })),
-    [activeSession?.name, challenges],
+    [challenges, selectedSession?.name],
   )
 
   const handleTileClick = (id: number) => {
@@ -366,7 +367,23 @@ export default function HomeArena() {
                 <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
                 <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
                 <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
-                <QuestChip label="Time" value={activeSession ? "2:45:30" : "Awaiting"} icon={<Clock className="w-4 h-4" />} />
+                <QuestChip label="Time" value={selectedSession ? "2:45:30" : "Awaiting"} icon={<Clock className="w-4 h-4" />} />
+              </div>
+
+              <div className="mx-auto mb-8 w-full max-w-md rounded-xl border-2 border-stone-900 bg-amber-100 px-4 py-3 shadow-[4px_4px_0_rgba(0,0,0,1)]">
+                <label className="mb-2 block font-serif text-xs uppercase tracking-[0.2em] text-stone-600">Select Session</label>
+                <select
+                  value={selectedSessionId ?? ""}
+                  onChange={(event) => selectSession(event.target.value)}
+                  className="w-full rounded-lg border-2 border-stone-900 bg-white px-3 py-2 font-serif text-stone-900"
+                >
+                  {sessions.length === 0 && <option value="">No sessions available</option>}
+                  {sessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 md:gap-4">
@@ -429,6 +446,21 @@ export default function HomeArena() {
                 <QuestChip label="Active" value={`${teams.length} Teams`} icon={<Users className="w-4 h-4" />} />
                 <QuestChip label="Quests" value={`${completedCount}/25`} icon={<Target className="w-4 h-4" />} />
                 <QuestChip label="Total" value={totalScore.toLocaleString()} icon={<Trophy className="w-4 h-4" />} />
+              </div>
+              <div className="min-w-56 rounded-lg border-2 border-stone-900 bg-amber-100 px-3 py-2 shadow-[3px_3px_0_rgba(0,0,0,1)]">
+                <label className="mb-1 block font-serif text-[10px] uppercase tracking-[0.2em] text-stone-600">Select Session</label>
+                <select
+                  value={selectedSessionId ?? ""}
+                  onChange={(event) => selectSession(event.target.value)}
+                  className="w-full rounded border border-stone-900 bg-white px-2 py-1 font-serif text-sm text-stone-900"
+                >
+                  {sessions.length === 0 && <option value="">No sessions available</option>}
+                  {sessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

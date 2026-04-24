@@ -8,16 +8,24 @@ interface ArenaContextValue {
   teams: ArenaTeam[]
   sessions: ArenaSession[]
   activeSession: ArenaSession | null
+  selectedSessionId: string | null
   challenges: ArenaChallenge[]
   completions: ArenaCompletion[]
   isLoading: boolean
-  refreshArena: () => Promise<void>
-  registerTeam: (name: string) => Promise<void>
+  selectSession: (sessionId: string) => void
+  refreshArena: (sessionId?: string | null) => Promise<void>
+  registerTeam: (name: string, sessionId?: string) => Promise<void>
   deleteTeam: (id: string) => Promise<void>
-  awardPoint: (id: string) => Promise<void>
-  createSession: (name: string) => Promise<void>
+  awardPoint: (id: string, sessionId?: string) => Promise<void>
+  createSession: (input: {
+    name: string
+    durationMinutes: number
+    challengeIds?: number[]
+    teamNames?: string[]
+    questionRows?: Array<{ title: string; description: string; difficulty: string; points?: number | null }>
+  }) => Promise<void>
   stopSession: (id: string) => Promise<void>
-  logCompletion: (input: { participantId: string; challengeId: number; proofUrl: string | null }) => Promise<void>
+  logCompletion: (input: { participantId: string; challengeId: number; proofUrl: string | null; sessionId?: string }) => Promise<void>
 }
 
 const ArenaContext = createContext<ArenaContextValue | null>(null)
@@ -28,32 +36,53 @@ const EMPTY_SNAPSHOT: ArenaSnapshot = {
   activeSession: null,
   challenges: [],
   completions: [],
+  selectedSessionId: null,
 }
 
 export function ArenaProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState<ArenaSnapshot>(EMPTY_SNAPSHOT)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshArena = useCallback(async () => {
+  const refreshArena = useCallback(async (sessionId?: string | null) => {
     setIsLoading(true)
+    const scopedSessionId = sessionId ?? selectedSessionId
+
     try {
-      const response = await fetch("/api/arena", { cache: "no-store" })
+      const search = new URLSearchParams()
+      if (scopedSessionId) {
+        search.set("session_id", scopedSessionId)
+      }
+
+      const response = await fetch(`/api/arena${search.size ? `?${search.toString()}` : ""}`, { cache: "no-store" })
       if (!response.ok) {
         throw new Error(`Failed to load arena data: ${response.status}`)
       }
 
       const data = (await response.json()) as ArenaSnapshot
       setSnapshot(data)
+
+      if (!selectedSessionId && data.selectedSessionId) {
+        setSelectedSessionId(data.selectedSessionId)
+      }
     } catch {
       setSnapshot(EMPTY_SNAPSHOT)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [selectedSessionId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshArena()
   }, [refreshArena])
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void refreshArena(selectedSessionId)
+    }
+  }, [refreshArena, selectedSessionId])
 
   const callMutation = useCallback(
     async (path: string, init: RequestInit) => {
@@ -70,19 +99,30 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
         throw new Error(errorText || `Request failed with ${response.status}`)
       }
 
+      const data = (await response.json().catch(() => null)) as Record<string, unknown> | null
       await refreshArena()
+      return data
     },
     [refreshArena],
   )
 
+  const selectSession = useCallback((sessionId: string) => {
+    setSelectedSessionId(sessionId)
+  }, [])
+
   const registerTeam = useCallback(
-    async (name: string) => {
+    async (name: string, sessionId?: string) => {
+      const scopedSessionId = sessionId ?? selectedSessionId
+      if (!scopedSessionId) {
+        throw new Error("Session is required")
+      }
+
       await callMutation("/api/arena/teams", {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, sessionId: scopedSessionId }),
       })
     },
-    [callMutation],
+    [callMutation, selectedSessionId],
   )
 
   const deleteTeam = useCallback(
@@ -93,18 +133,37 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
   )
 
   const awardPoint = useCallback(
-    async (id: string) => {
-      await callMutation(`/api/arena/teams/${id}/score`, { method: "POST" })
+    async (id: string, sessionId?: string) => {
+      const scopedSessionId = sessionId ?? selectedSessionId
+      if (!scopedSessionId) {
+        throw new Error("Session is required")
+      }
+
+      await callMutation(`/api/arena/teams/${id}/score`, {
+        method: "POST",
+        body: JSON.stringify({ sessionId: scopedSessionId }),
+      })
     },
-    [callMutation],
+    [callMutation, selectedSessionId],
   )
 
   const createSession = useCallback(
-    async (name: string) => {
-      await callMutation("/api/arena/sessions", {
+    async (input: {
+      name: string
+      durationMinutes: number
+      challengeIds?: number[]
+      teamNames?: string[]
+      questionRows?: Array<{ title: string; description: string; difficulty: string; points?: number | null }>
+    }) => {
+      const result = await callMutation("/api/arena/sessions", {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(input),
       })
+
+      const newSessionId = typeof result?.sessionId === "string" ? result.sessionId : null
+      if (newSessionId) {
+        setSelectedSessionId(newSessionId)
+      }
     },
     [callMutation],
   )
@@ -117,13 +176,18 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
   )
 
   const logCompletion = useCallback(
-    async (input: { participantId: string; challengeId: number; proofUrl: string | null }) => {
+    async (input: { participantId: string; challengeId: number; proofUrl: string | null; sessionId?: string }) => {
+      const scopedSessionId = input.sessionId ?? selectedSessionId
+      if (!scopedSessionId) {
+        throw new Error("Session is required")
+      }
+
       await callMutation("/api/arena/completions", {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, sessionId: scopedSessionId }),
       })
     },
-    [callMutation],
+    [callMutation, selectedSessionId],
   )
 
   const value = useMemo<ArenaContextValue>(
@@ -131,9 +195,11 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       teams: snapshot.teams,
       sessions: snapshot.sessions,
       activeSession: snapshot.activeSession,
+      selectedSessionId,
       challenges: snapshot.challenges,
       completions: snapshot.completions,
       isLoading,
+      selectSession,
       refreshArena,
       registerTeam,
       deleteTeam,
@@ -142,7 +208,19 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       stopSession,
       logCompletion,
     }),
-    [awardPoint, createSession, deleteTeam, isLoading, logCompletion, refreshArena, registerTeam, snapshot, stopSession],
+    [
+      awardPoint,
+      createSession,
+      deleteTeam,
+      isLoading,
+      logCompletion,
+      refreshArena,
+      registerTeam,
+      selectSession,
+      selectedSessionId,
+      snapshot,
+      stopSession,
+    ],
   )
 
   return <ArenaContext.Provider value={value}>{children}</ArenaContext.Provider>
