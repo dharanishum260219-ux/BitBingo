@@ -510,7 +510,9 @@ export async function logCompletion(input: {
   sessionId: string
 }) {
   const client = createSupabaseClient(true)
-  if (!client) {
+  const isDemoPayload = input.sessionId.startsWith("session-demo-") || /^\d+$/.test(input.participantId)
+
+  if (!client || isDemoPayload) {
     const store = getDemoState()
     const participant = store.participants.find(
       (entry) => entry.id === input.participantId && entry.session_id === input.sessionId,

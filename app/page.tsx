@@ -44,8 +44,10 @@ interface BoardTile {
 function toImageUrl(value: string | null) {
   if (!value) return null
   const trimmed = value.trim()
-  if (!/^https?:\/\//i.test(trimmed)) return null
-  return trimmed
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (/^data:image\//i.test(trimmed)) return trimmed
+  return null
 }
 
 function getSpecialStyle(tile: BoardTile) {
@@ -259,7 +261,7 @@ function QuestGrid({ tiles, onTileClick }: { tiles: BoardTile[]; onTileClick: (i
       </div>
       <div className="h-2 bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
       <div className="overflow-x-auto p-3 md:p-4">
-        <div className="grid min-w-[520px] sm:min-w-[560px] grid-cols-5 gap-2 md:min-w-0">
+        <div className="grid min-w-[430px] sm:min-w-[560px] grid-cols-5 gap-2 md:min-w-0">
           {tiles.map((tile) => (
             <BingoTileComponent key={tile.id} tile={tile} onClick={() => onTileClick(tile.id)} />
           ))}
@@ -554,11 +556,22 @@ export default function HomeArena() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border-2 border-stone-800 bg-teal-100 p-4">
-                  {selectedTile.proofUrl && (
-                    <p className="rounded-lg border-2 border-stone-800 bg-white/70 px-3 py-2 font-serif text-sm text-stone-700">
-                      Proof: {selectedTile.proofUrl}
+                <div className="rounded-xl border-2 border-stone-800 bg-amber-100 p-4">
+                  <p className="font-serif text-xs uppercase tracking-widest text-stone-600">Output Proof</p>
+                  {proofImageUrl ? (
+                    <div className="mt-3 overflow-hidden rounded-lg border-2 border-stone-800 bg-white">
+                      <img
+                        src={proofImageUrl}
+                        alt={`${selectedTile.label} output proof`}
+                        className="h-auto w-full max-h-80 object-contain"
+                      />
+                    </div>
+                  ) : selectedTile.proofUrl ? (
+                    <p className="mt-3 rounded-lg border-2 border-stone-800 bg-white/80 px-3 py-2 font-serif text-sm leading-6 text-stone-700 break-all">
+                      {selectedTile.proofUrl}
                     </p>
+                  ) : (
+                    <p className="mt-3 font-serif text-sm text-stone-600">No proof attached.</p>
                   )}
                   {selectedTile.completedAt && (
                     <p className="mt-3 font-serif text-xs uppercase tracking-[0.2em] text-stone-500">
@@ -566,19 +579,6 @@ export default function HomeArena() {
                     </p>
                   )}
                 </div>
-
-                {proofImageUrl && (
-                  <div className="rounded-xl border-2 border-stone-800 bg-amber-100 p-4">
-                    <p className="font-serif text-xs uppercase tracking-widest text-stone-600">Output Image</p>
-                    <div className="mt-3 overflow-hidden rounded-lg border-2 border-stone-800 bg-white">
-                      <img
-                        src={proofImageUrl}
-                        alt={`${selectedTile.label} output proof`}
-                        className="h-auto w-full object-cover"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="rounded-xl border-2 border-stone-800 bg-amber-100 p-4">

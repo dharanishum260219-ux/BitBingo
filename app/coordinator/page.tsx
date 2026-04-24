@@ -4,14 +4,60 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
-import {
-  ArrowLeft,
-  Upload,
-  Zap,
-  Gem,
-  Scroll,
-  Stamp,
-} from "lucide-react"
+import { ArrowLeft, Upload, Zap, Gem, Scroll, Users, Stamp } from "lucide-react"
+
+const MAX_UPLOAD_FILE_BYTES = 20 * 1024 * 1024
+const TARGET_UPLOAD_MAX_EDGE = 1280
+const TARGET_UPLOAD_QUALITY = 0.72
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      if (!result) {
+        reject(new Error("Failed to read image file."))
+        return
+      }
+      resolve(result)
+    }
+    reader.onerror = () => reject(new Error("Failed to read image file."))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImageElement(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Failed to process image."))
+    image.src = dataUrl
+  })
+}
+
+async function compressImageDataUrl(dataUrl: string) {
+  const image = await loadImageElement(dataUrl)
+  const largestEdge = Math.max(image.width, image.height)
+  if (largestEdge <= TARGET_UPLOAD_MAX_EDGE) {
+    return dataUrl
+  }
+
+  const scale = TARGET_UPLOAD_MAX_EDGE / largestEdge
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+
+  const context = canvas.getContext("2d")
+  if (!context) {
+    return dataUrl
+  }
+
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL("image/jpeg", TARGET_UPLOAD_QUALITY)
+}
 
 function Btn({
   children,
@@ -38,12 +84,7 @@ function Btn({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${styles[variant]} ${className}`}
-    >
+    <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${styles[variant]} ${className}`}>
       {children}
     </button>
   )
@@ -83,17 +124,30 @@ function FormLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function SelectInput({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; options: string[]; placeholder?: string }) {
+function SelectInput({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: Array<string | { value: string; label: string }>
+  placeholder?: string
+}) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full px-4 py-3 bg-white/70 border-2 border-stone-900 font-sans text-stone-800 focus:outline-none rounded-lg cursor-pointer"
-    >
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-4 py-3 bg-white/70 border-2 border-stone-900 font-sans text-stone-800 focus:outline-none rounded-lg cursor-pointer">
       <option value="">{placeholder ?? "Select..."}</option>
-      {options.map((o) => (
-        <option key={o} value={o}>{o}</option>
-      ))}
+      {options.map((option) => {
+        const optionValue = typeof option === "string" ? option : option.value
+        const optionLabel = typeof option === "string" ? option : option.label
+
+        return (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        )
+      })}
     </select>
   )
 }
@@ -109,56 +163,31 @@ interface CompletionDetails {
 
 function CompletionPopup({ details, onClose }: { details: CompletionDetails | null; onClose: () => void }) {
   if (!details) return null
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4">
-      <button
-        type="button"
-        aria-label="Close completion popup"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/50"
-      />
-
+      <button type="button" aria-label="Close completion popup" onClick={onClose} className="absolute inset-0 bg-black/50" />
       <div className="relative w-full max-w-xl bg-amber-100 border-4 border-stone-900 rounded-xl shadow-[8px_8px_0_rgba(0,0,0,1)] overflow-hidden">
         <div className="bg-stone-800 px-3 sm:px-5 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
           <Stamp className="w-6 h-6 text-amber-400" />
           <h3 className="font-sans text-base sm:text-xl font-bold text-amber-100 tracking-wide">Challenge Completed</h3>
         </div>
         <div className="h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
-
         <div className="p-3 sm:p-5 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Team</p>
-              <p className="font-sans font-bold text-stone-900 text-lg">{details.team}</p>
-            </div>
-            <div>
-              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
-              <p className="font-sans font-bold text-stone-900 text-lg">{details.session}</p>
-            </div>
-            <div>
-              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Quest</p>
-              <p className="font-sans font-bold text-stone-900 text-lg">{details.quest}</p>
-            </div>
-            <div>
-              <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Updated Score</p>
-              <p className="font-sans font-bold text-emerald-700 text-lg">{details.newScore} PTS</p>
-            </div>
+            <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Team</p><p className="font-sans font-bold text-stone-900 text-lg">{details.team}</p></div>
+            <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p><p className="font-sans font-bold text-stone-900 text-lg">{details.session}</p></div>
+            <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Quest</p><p className="font-sans font-bold text-stone-900 text-lg">{details.quest}</p></div>
+            <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Updated Score</p><p className="font-sans font-bold text-emerald-700 text-lg">{details.newScore} PTS</p></div>
           </div>
-
           <div>
             <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600 mb-1">Proof / Notes</p>
-            <p className="font-sans text-stone-800 bg-orange-50 border-2 border-stone-300 rounded-lg px-3 py-2 min-h-12">
-              {details.proof || "No additional proof notes provided."}
-            </p>
+            <p className="font-sans text-stone-800 bg-orange-50 border-2 border-stone-300 rounded-lg px-3 py-2 min-h-12 break-all">{details.proof || "No additional proof notes provided."}</p>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs font-sans uppercase tracking-wider text-stone-600">
             <span>Stamped at {details.stampedAt}</span>
             <span className="text-emerald-700 font-bold">Successfully Logged</span>
           </div>
         </div>
-
         <div className="border-t-2 border-stone-400 bg-amber-200/60 px-5 py-3 flex justify-end">
           <Btn onClick={onClose} className="px-6">Close</Btn>
         </div>
@@ -170,49 +199,21 @@ function CompletionPopup({ details, onClose }: { details: CompletionDetails | nu
 function SessionSummaryPanel() {
   const { sessions, selectedSessionId, selectSession, teams } = useArena()
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
-
   return (
     <Card className="mb-8">
       <CardHeader icon={<Zap className="w-6 h-6" />} title="Session Summary" color="emerald" />
       <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="sm:col-span-2 md:col-span-4">
-          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Select Session</p>
-          <select
-            value={selectedSessionId ?? ""}
-            onChange={(event) => selectSession(event.target.value)}
-            className="mt-1 w-full rounded-lg border-2 border-stone-900 bg-white px-3 py-2 font-sans text-stone-900"
-          >
+          <FormLabel>Select Session</FormLabel>
+          <select value={selectedSessionId ?? ""} onChange={(event) => selectSession(event.target.value)} className="mt-1 w-full rounded-lg border-2 border-stone-900 bg-white px-3 py-2 font-sans text-stone-900">
             {sessions.length === 0 && <option value="">No sessions available</option>}
-            {sessions.map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.name}
-              </option>
-            ))}
+            {sessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}
           </select>
         </div>
-        <div>
-          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p>
-          <p className="font-sans text-lg font-bold text-stone-900">
-            {selectedSession ? selectedSession.name : "-"}
-          </p>
-        </div>
-        <div>
-          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Time Remaining</p>
-          <p className="font-sans text-lg font-bold text-stone-900">45:00</p>
-        </div>
-        <div>
-          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Live Teams</p>
-          <p className="font-sans text-lg font-bold text-stone-900">{teams.length}</p>
-        </div>
-        <div>
-          <p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Status</p>
-          <div className="flex items-center gap-2 mt-1">
-            <div className={`w-3 h-3 rounded-full ${selectedSession ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} />
-            <span className={`font-sans font-bold text-sm ${selectedSession ? "text-emerald-700" : "text-stone-500"}`}>
-              {selectedSession ? "SELECTED" : "INACTIVE"}
-            </span>
-          </div>
-        </div>
+        <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Session</p><p className="font-sans text-lg font-bold text-stone-900">{selectedSession ? selectedSession.name : "-"}</p></div>
+        <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Time Remaining</p><p className="font-sans text-lg font-bold text-stone-900">45:00</p></div>
+        <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Live Teams</p><p className="font-sans text-lg font-bold text-stone-900">{teams.length}</p></div>
+        <div><p className="font-sans text-[10px] uppercase tracking-widest text-stone-600">Status</p><div className="flex items-center gap-2 mt-1"><div className={`w-3 h-3 rounded-full ${selectedSession ? "bg-emerald-500 animate-pulse" : "bg-stone-400"}`} /><span className={`font-sans font-bold text-sm ${selectedSession ? "text-emerald-700" : "text-stone-500"}`}>{selectedSession ? "SELECTED" : "INACTIVE"}</span></div></div>
       </div>
     </Card>
   )
@@ -221,21 +222,25 @@ function SessionSummaryPanel() {
 function ControlDeckPanel() {
   const { teams, challenges, logCompletion, sessions, selectedSessionId, isLoading } = useArena()
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
-  const [selectedTeam, setSelectedTeam] = useState("")
+  const [selectedTeamId, setSelectedTeamId] = useState("")
   const [selectedQuest, setSelectedQuest] = useState("")
   const [proof, setProof] = useState("")
+  const [proofImageUrl, setProofImageUrl] = useState<string | null>(null)
+  const [proofFileName, setProofFileName] = useState("")
   const [completionDetails, setCompletionDetails] = useState<CompletionDetails | null>(null)
+  const [submitError, setSubmitError] = useState("")
 
   useEffect(() => {
-    setSelectedTeam("")
+    setSelectedTeamId("")
     setSelectedQuest("")
+    setSubmitError("")
   }, [selectedSessionId])
 
   useEffect(() => {
-    if (selectedTeam && !teams.some((team) => team.name === selectedTeam)) {
-      setSelectedTeam("")
+    if (selectedTeamId && !teams.some((team) => team.id === selectedTeamId)) {
+      setSelectedTeamId("")
     }
-  }, [selectedTeam, teams])
+  }, [selectedTeamId, teams])
 
   useEffect(() => {
     if (selectedQuest && !challenges.some((challenge) => challenge.title === selectedQuest)) {
@@ -243,33 +248,88 @@ function ControlDeckPanel() {
     }
   }, [challenges, selectedQuest])
 
-  const handleStamp = async () => {
-    if (!selectedTeam || !selectedQuest || !selectedSessionId || isLoading) return
-    const team = teams.find((t) => t.name === selectedTeam)
-    const challenge = challenges.find((entry) => entry.title === selectedQuest)
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
 
-    if (team && challenge) {
+    setSubmitError("")
+
+    if (!file.type.startsWith("image/")) {
+      setSubmitError("Please select an image file.")
+      event.target.value = ""
+      return
+    }
+
+    if (file.size > MAX_UPLOAD_FILE_BYTES) {
+      setSubmitError("Image is too large. Please choose one under 20MB.")
+      event.target.value = ""
+      return
+    }
+
+    try {
+      const rawDataUrl = await readFileAsDataUrl(file)
+      const compressedDataUrl = await compressImageDataUrl(rawDataUrl)
+      setProofImageUrl(compressedDataUrl)
+      setProofFileName(file.name)
+      setProof("")
+    } catch {
+      setSubmitError("Unable to process this image. Try another file.")
+    }
+
+    event.target.value = ""
+  }
+
+  const handleStamp = async () => {
+    if (!selectedTeamId || !selectedQuest || !selectedSessionId || isLoading) return
+    const team = teams.find((t) => t.id === selectedTeamId)
+    const challenge = challenges.find((entry) => entry.title === selectedQuest)
+    const proofPayload = proofImageUrl ?? (proof.trim() || null)
+
+    if (!team || !challenge) {
+      setSubmitError("Choose a valid team and challenge for the selected session.")
+      return
+    }
+
+    const teamSessionId = team.sessionId ?? null
+    if (!teamSessionId || teamSessionId !== selectedSessionId) {
+      setSubmitError("Selected team is not in the current session. Please reselect team after switching session.")
+      setSelectedTeamId("")
+      return
+    }
+
+    try {
+      setSubmitError("")
       await logCompletion({
         participantId: team.id,
         challengeId: challenge.id,
-        proofUrl: proof.trim() || null,
-        sessionId: selectedSessionId,
+        proofUrl: proofPayload,
+        sessionId: teamSessionId,
       })
       setCompletionDetails({
-        team: selectedTeam,
+        team: team.name,
         quest: selectedQuest,
-        proof: proof.trim(),
+        proof: proofImageUrl ? `Image attached${proofFileName ? `: ${proofFileName}` : ""}` : (proofPayload ?? ""),
         session: selectedSession?.name ?? "No Session Selected",
         stampedAt: new Date().toLocaleString(),
         newScore: team.score + challenge.points,
       })
+      setSelectedTeamId("")
+      setSelectedQuest("")
+      setProof("")
+      setProofImageUrl(null)
+      setProofFileName("")
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : "Unable to log completion"
+      try {
+        const parsed = JSON.parse(raw) as { error?: string }
+        setSubmitError(parsed.error ?? raw)
+      } catch {
+        setSubmitError(raw)
+      }
     }
-    setSelectedTeam("")
-    setSelectedQuest("")
-    setProof("")
   }
 
-  const teamNames = teams.map((t) => t.name)
+  const teamOptions = teams.map((team) => ({ value: team.id, label: team.name }))
   const questNames = challenges.map((challenge) => challenge.title)
 
   return (
@@ -280,7 +340,7 @@ function ControlDeckPanel() {
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <FormLabel>Select Team</FormLabel>
-              <SelectInput value={selectedTeam} onChange={setSelectedTeam} options={teamNames} placeholder="Select Team" />
+              <SelectInput value={selectedTeamId} onChange={setSelectedTeamId} options={teamOptions} placeholder="Select Team" />
             </div>
             <div>
               <FormLabel>Select Quest / Tile</FormLabel>
@@ -290,19 +350,40 @@ function ControlDeckPanel() {
 
           <div>
             <FormLabel>Proof of Completion</FormLabel>
-            <div className="bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-4 sm:p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
+            <label className="block bg-amber-200/30 border-4 border-dashed border-stone-700 rounded-lg p-4 sm:p-6 text-center cursor-pointer hover:bg-amber-200/50 transition-colors">
+              <input type="file" accept="image/*" capture="environment" onChange={handleFileSelect} className="hidden" />
               <div className="flex flex-col items-center gap-3">
                 <div className="w-12 h-12 bg-orange-200 border-2 border-stone-800 rounded-lg flex items-center justify-center">
                   <Upload className="w-6 h-6 text-stone-700" />
                 </div>
                 <div>
                   <p className="font-sans font-bold text-stone-800">Upload Intel Dossier</p>
-                  <p className="text-sm font-sans text-stone-600">Screenshot, photo, or verification</p>
+                  <p className="text-sm font-sans text-stone-600">Screenshot, camera photo, or verification</p>
                 </div>
+                {proofFileName && <p className="text-xs font-sans font-bold text-emerald-700">Selected: {proofFileName}</p>}
               </div>
-            </div>
+            </label>
+            {proofImageUrl && (
+              <div className="mt-3 overflow-hidden rounded-lg border-2 border-stone-900 bg-white">
+                <img src={proofImageUrl} alt="Proof preview" className="h-auto w-full max-h-64 object-contain" />
+              </div>
+            )}
+            {proofImageUrl && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProofImageUrl(null)
+                    setProofFileName("")
+                  }}
+                  className="rounded-lg border-2 border-stone-900 bg-amber-100 px-3 py-1 font-sans text-xs font-bold uppercase tracking-wider text-stone-800"
+                >
+                  Remove Image
+                </button>
+              </div>
+            )}
             <textarea
-              placeholder="Add notes or verification details..."
+              placeholder="Or add proof URL / notes..."
               value={proof}
               onChange={(e) => setProof(e.target.value)}
               className="mt-3 w-full px-4 py-3 bg-amber-50/50 border-2 border-stone-900 font-sans text-stone-800 placeholder-stone-400 focus:outline-none rounded-lg min-h-20 resize-none"
@@ -310,15 +391,17 @@ function ControlDeckPanel() {
           </div>
 
           <div className="flex justify-center pt-2">
-            <Btn
-              variant="stamp"
-              onClick={handleStamp}
-              disabled={!selectedTeam || !selectedQuest || !selectedSessionId || isLoading}
-            >
+            <Btn variant="stamp" onClick={handleStamp} disabled={!selectedTeamId || !selectedQuest || !selectedSessionId || isLoading}>
               <Stamp className="w-6 h-6" />
               STAMP COMPLETION
             </Btn>
           </div>
+
+          {submitError && (
+            <p className="rounded-lg border-2 border-red-800 bg-red-100 px-3 py-2 font-sans text-sm font-bold text-red-900">
+              {submitError}
+            </p>
+          )}
         </div>
       </Card>
 

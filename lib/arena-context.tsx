@@ -48,6 +48,8 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     const scopedSessionId = sessionId ?? selectedSessionId
 
+    setSnapshot(EMPTY_SNAPSHOT)
+
     try {
       const search = new URLSearchParams()
       if (scopedSessionId) {
@@ -96,7 +98,15 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || `Request failed with ${response.status}`)
+        if (errorText) {
+          try {
+            const parsed = JSON.parse(errorText) as { error?: string }
+            throw new Error(parsed.error || errorText)
+          } catch {
+            throw new Error(errorText)
+          }
+        }
+        throw new Error(`Request failed with ${response.status}`)
       }
 
       const data = (await response.json().catch(() => null)) as Record<string, unknown> | null
@@ -108,7 +118,8 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
 
   const selectSession = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId)
-  }, [])
+    void refreshArena(sessionId)
+  }, [refreshArena])
 
   const registerTeam = useCallback(
     async (name: string, sessionId?: string) => {
