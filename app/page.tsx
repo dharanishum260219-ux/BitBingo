@@ -220,20 +220,20 @@ function BingoTileComponent({ tile, onClick }: { tile: BoardTile; onClick: () =>
   const style = `${getSpecialStyle(tile)} ${tile.completed ? "" : "hover:-translate-y-1 hover:shadow-[5px_5px_0_rgba(0,0,0,1)]"}`
 
   return (
-    <button className={`${base} ${style}`} onClick={onClick}>
+    <button className={`${base} ${style}`} onClick={onClick} aria-label={tile.label}>
       <div className="absolute inset-1 border border-white/40 rounded pointer-events-none" />
       <div className="absolute left-1 top-1 rounded-full border border-stone-800 bg-white/80 px-1.5 py-0.5 font-serif text-[10px] font-bold text-stone-700">
         {tile.points}
       </div>
       <div className={tile.completed ? "text-stone-500" : "text-stone-700"}>{tile.icon}</div>
       <span
-        className={`mt-1 font-serif text-xs font-bold text-center leading-tight ${
+        className={`mt-1 hidden w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5 font-serif text-xs font-bold text-center leading-tight sm:block ${
           tile.completed ? "text-stone-500 line-through" : "text-stone-800"
         }`}
       >
         {tile.label}
       </span>
-      <span className="mt-0.5 font-serif text-[9px] uppercase tracking-wider text-stone-500">
+      <span className="mt-0.5 hidden font-serif text-[9px] uppercase tracking-wider text-stone-500 sm:block">
         {getSpecialLabel(tile.specialType)}
       </span>
       {tile.completed && (
