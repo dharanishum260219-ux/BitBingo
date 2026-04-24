@@ -9,20 +9,15 @@ import {
 export async function POST(request: Request) {
   const formData = await request.formData()
   const passcode = String(formData.get("passcode") ?? "")
+  const baseUrl = new URL(request.url)
 
   const configuredSecret = getAdminPasscode()
 
   if (!configuredSecret || !isValidAdminPasscode(passcode)) {
-    return new NextResponse(null, {
-      status: 303,
-      headers: { Location: "/admin/login?error=1" },
-    })
+    return NextResponse.redirect(new URL("/admin/login?error=1", baseUrl), 303)
   }
 
-  const response = new NextResponse(null, {
-    status: 303,
-    headers: { Location: "/admin" },
-  })
+  const response = NextResponse.redirect(new URL("/admin", baseUrl), 303)
 
   response.cookies.set({
     name: ADMIN_COOKIE_NAME,

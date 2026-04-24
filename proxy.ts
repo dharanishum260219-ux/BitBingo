@@ -25,18 +25,18 @@ export function proxy(request: NextRequest) {
   const configuredPasscode = getAdminPasscode()
 
   if (!configuredPasscode) {
-    return new NextResponse(null, {
-      status: 307,
-      headers: { Location: "/admin/login?setup=1" },
-    })
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = "/admin/login"
+    loginUrl.search = "?setup=1"
+    return NextResponse.redirect(loginUrl)
   }
 
   const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value ?? ""
   if (token !== configuredPasscode) {
-    return new NextResponse(null, {
-      status: 307,
-      headers: { Location: "/admin/login" },
-    })
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = "/admin/login"
+    loginUrl.search = ""
+    return NextResponse.redirect(loginUrl)
   }
 
   return NextResponse.next()
