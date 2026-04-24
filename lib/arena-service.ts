@@ -182,6 +182,18 @@ export async function getArenaSnapshot(sessionId?: string | null): Promise<Arena
   ])
 
   if (sessionsResult.error || participantsResult.error || challengesResult.error || sessionChallengesResult.error || completionsResult.error) {
+    if (IS_PRODUCTION) {
+      const details = [
+        sessionsResult.error?.message,
+        participantsResult.error?.message,
+        challengesResult.error?.message,
+        sessionChallengesResult.error?.message,
+        completionsResult.error?.message,
+      ].filter(Boolean).join(" | ")
+
+      throw new Error(`Failed to load arena snapshot from Supabase${details ? `: ${details}` : ""}`)
+    }
+
     return buildSnapshot(getDemoState(), sessionId ?? null)
   }
 
@@ -218,6 +230,10 @@ export async function getChallengePool() {
     .order("id", { ascending: true })
 
   if (error || !data) {
+    if (IS_PRODUCTION) {
+      throw error ?? new Error("Unable to fetch challenge pool from Supabase")
+    }
+
     return DEMO_CHALLENGES
   }
 
@@ -510,7 +526,7 @@ export async function logCompletion(input: {
   sessionId: string
 }) {
   const client = createSupabaseClient(true)
-  const isDemoPayload = input.sessionId.startsWith("session-demo-") || /^\d+$/.test(input.participantId)
+  const isDemoPayload = !IS_PRODUCTION && (input.sessionId.startsWith("session-demo-") || /^\d+$/.test(input.participantId))
 
   if (!client || isDemoPayload) {
     const store = getDemoState()
