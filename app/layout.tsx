@@ -1,11 +1,17 @@
 /* eslint-disable @next/next/no-page-custom-font */
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { ArenaProvider } from "@/lib/arena-context"
 import "./globals.css"
 
 export const metadata: Metadata = {
   title: "BitBingo - Fantasy Quest Arena",
   description: "Enter the Live Quest Arena and conquer the Bingo Board",
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
