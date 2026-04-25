@@ -16,6 +16,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
 const IS_PRODUCTION = process.env.NODE_ENV === "production"
+const ENABLE_DEMO_DATA = process.env.ENABLE_DEMO_DATA === "true"
 
 function getMissingSupabaseEnv(serviceRole = false) {
   const missing: string[] = []
@@ -53,6 +54,16 @@ function createSupabaseClient(serviceRole = false): SupabaseClient | null {
 }
 
 const demoState: ArenaStore = cloneDemoStore()
+
+function getEmptyStore(): ArenaStore {
+  return {
+    sessions: [],
+    participants: [],
+    challenges: [],
+    session_challenges: [],
+    completions: [],
+  }
+}
 
 const DEFAULT_DIFFICULTY = "medium"
 
@@ -118,15 +129,17 @@ function normalizeTeamNames(teamNames: string[]) {
   )
 }
 
-function pickSessionChallengeSet(challengeIds: number[], preferredChallengeIds: number[] = []) {
+function pickSessionChallengeSet(challengeIds: number[], preferredChallengeIds: number[] = [], allowAutoFill = true) {
   const pool = challengeIds.slice().sort((a, b) => a - b)
   const preferred = preferredChallengeIds.filter((id) => pool.includes(id))
   const dedupedPreferred = Array.from(new Set(preferred))
   const remaining = pool.filter((id) => !dedupedPreferred.includes(id))
-  const selected = [...dedupedPreferred, ...remaining].slice(0, 25)
+  const selected = allowAutoFill
+    ? [...dedupedPreferred, ...remaining].slice(0, 25)
+    : dedupedPreferred.slice(0, 25)
 
   if (selected.length < 25) {
-    throw new Error("Need at least 25 challenges to create a session board")
+    throw new Error("Need 25 selected/imported challenges to create a session board")
   }
 
   return selected.map((challengeId, position) => ({ challenge_id: challengeId, position }))
@@ -153,7 +166,7 @@ export async function getArenaSnapshot(sessionId?: string | null): Promise<Arena
   const client = createSupabaseClient(true)
 
   if (!client) {
-    return buildSnapshot(getDemoState(), sessionId ?? null)
+    return buildSnapshot(ENABLE_DEMO_DATA ? getDemoState() : getEmptyStore(), sessionId ?? null)
   }
 
   const scopedSessionId = sessionId ?? null
@@ -194,7 +207,7 @@ export async function getArenaSnapshot(sessionId?: string | null): Promise<Arena
       throw new Error(`Failed to load arena snapshot from Supabase${details ? `: ${details}` : ""}`)
     }
 
-    return buildSnapshot(getDemoState(), sessionId ?? null)
+    return buildSnapshot(ENABLE_DEMO_DATA ? getDemoState() : getEmptyStore(), sessionId ?? null)
   }
 
   const store: ArenaStore = {
@@ -221,7 +234,7 @@ export async function getChallenges(sessionId: string): Promise<ArenaSnapshot["c
 export async function getChallengePool() {
   const client = createSupabaseClient(true)
   if (!client) {
-    return DEMO_CHALLENGES
+    return ENABLE_DEMO_DATA ? DEMO_CHALLENGES : []
   }
 
   const { data, error } = await client
@@ -234,7 +247,7 @@ export async function getChallengePool() {
       throw error ?? new Error("Unable to fetch challenge pool from Supabase")
     }
 
-    return DEMO_CHALLENGES
+    return ENABLE_DEMO_DATA ? DEMO_CHALLENGES : []
   }
 
   return data
@@ -280,11 +293,44 @@ export async function upsertChallengePool(rows: ChallengeImportRow[]) {
     return { challengeIds, importedCount: normalizedRows.length }
   }
 
-  const { data: existingRows } = await client
-    .from("challenges")
-    .select("id,title")
+  let legacyPositionMode = false
+  const usedLegacyPositions = new Set<number>()
 
-  const existingByKey = new Map((existingRows ?? []).map((challenge) => [challengeKey(challenge.title), Number(challenge.id)]))
+  const { data: existingRowsWithPosition, error: existingRowsWithPositionError } = await client
+    .from("challenges")
+    .select("id,title,position")
+
+  let existingRows: Array<{ id: number; title: string }> = []
+
+  if (!existingRowsWithPositionError && Array.isArray(existingRowsWithPosition)) {
+    legacyPositionMode = true
+    existingRows = existingRowsWithPosition.map((row) => ({
+      id: Number(row.id),
+      title: String(row.title),
+    }))
+
+    for (const row of existingRowsWithPosition) {
+      const position = Number((row as { position?: unknown }).position)
+      if (Number.isInteger(position) && position >= 0 && position <= 24) {
+        usedLegacyPositions.add(position)
+      }
+    }
+  } else {
+    const { data: existingRowsBase, error: existingRowsBaseError } = await client
+      .from("challenges")
+      .select("id,title")
+
+    if (existingRowsBaseError) {
+      throw existingRowsBaseError
+    }
+
+    existingRows = (existingRowsBase ?? []).map((row) => ({
+      id: Number(row.id),
+      title: String(row.title),
+    }))
+  }
+
+  const existingByKey = new Map(existingRows.map((challenge) => [challengeKey(challenge.title), Number(challenge.id)]))
   const challengeIds: number[] = []
 
   for (const row of normalizedRows) {
@@ -310,18 +356,50 @@ export async function upsertChallengePool(rows: ChallengeImportRow[]) {
       continue
     }
 
+    const insertPayload: {
+      title: string
+      description: string
+      difficulty: string
+      points: number
+      position?: number
+    } = {
+      title: row.title,
+      description: row.description,
+      difficulty: row.difficulty,
+      points: row.points,
+    }
+
+    if (legacyPositionMode) {
+      let nextPosition = -1
+      for (let position = 0; position <= 24; position += 1) {
+        if (!usedLegacyPositions.has(position)) {
+          nextPosition = position
+          break
+        }
+      }
+
+      if (nextPosition < 0) {
+        throw new Error(
+          "Your database is using the legacy challenge schema (position 0-24 only). Apply supabase/migrations/002_session_scoped_challenges.sql to support importing more questions.",
+        )
+      }
+
+      insertPayload.position = nextPosition
+      usedLegacyPositions.add(nextPosition)
+    }
+
     const { data: created, error: createError } = await client
       .from("challenges")
-      .insert({
-        title: row.title,
-        description: row.description,
-        difficulty: row.difficulty,
-        points: row.points,
-      })
+      .insert(insertPayload)
       .select("id")
       .single()
 
     if (createError || !created) {
+      if (createError?.code === "23502" && createError?.message?.includes("position")) {
+        throw new Error(
+          "Your database schema is out of date (challenges.position is still required). Apply supabase/migrations/002_session_scoped_challenges.sql.",
+        )
+      }
       throw createError ?? new Error("Failed to create challenge")
     }
 
@@ -391,7 +469,7 @@ export async function awardPoint(id: string, sessionId: string) {
   await incrementParticipantScore(client, id, 10)
 }
 
-async function seedSessionChallenges(client: SupabaseClient, sessionId: string, preferredChallengeIds: number[] = []) {
+async function seedSessionChallenges(client: SupabaseClient, sessionId: string, preferredChallengeIds: number[] = [], allowAutoFill = true) {
   const { data: challengeRows, error: challengesError } = await client
     .from("challenges")
     .select("id")
@@ -405,6 +483,7 @@ async function seedSessionChallenges(client: SupabaseClient, sessionId: string, 
   const selected = pickSessionChallengeSet(
     challengeRows.map((row) => Number(row.id)),
     preferredChallengeIds,
+    allowAutoFill,
   )
 
   const { error: insertError } = await client
@@ -443,16 +522,26 @@ export async function createSession(input: {
     }
 
     const sessionId = crypto.randomUUID()
+    for (const session of store.sessions) {
+      session.is_active = false
+    }
     store.sessions.unshift({
       id: sessionId,
       name: trimmed,
-      is_active: false,
+      is_active: true,
       duration_minutes: durationMinutes,
       created_at: new Date().toISOString(),
     })
+
+    const requestedChallengeIds = [...importedChallengeIds, ...challengeIds]
+    if (requestedChallengeIds.length === 0) {
+      throw new Error("Select at least one challenge or upload questions before creating a session")
+    }
+
     const selected = pickSessionChallengeSet(
       store.challenges.map((challenge) => challenge.id),
-      [...importedChallengeIds, ...challengeIds],
+      requestedChallengeIds,
+      false,
     )
     const now = new Date().toISOString()
     const demoRows: SessionChallengeRow[] = selected.map((entry) => ({
@@ -482,9 +571,16 @@ export async function createSession(input: {
     importedChallengeIds = (await upsertChallengePool(questionRows)).challengeIds
   }
 
+  const requestedChallengeIds = [...importedChallengeIds, ...challengeIds]
+  if (requestedChallengeIds.length === 0) {
+    throw new Error("Select at least one challenge or upload questions before creating a session")
+  }
+
+  await client.from("sessions").update({ is_active: false }).eq("is_active", true)
+
   const { data: createdSession, error: sessionError } = await client
     .from("sessions")
-    .insert({ name: trimmed, is_active: false, duration_minutes: durationMinutes })
+    .insert({ name: trimmed, is_active: true, duration_minutes: durationMinutes })
     .select("id")
     .single()
 
@@ -492,7 +588,7 @@ export async function createSession(input: {
     throw sessionError ?? new Error("Unable to create session")
   }
 
-  await seedSessionChallenges(client, createdSession.id, [...importedChallengeIds, ...challengeIds])
+  await seedSessionChallenges(client, createdSession.id, requestedChallengeIds, false)
 
   if (teamNames.length > 0) {
     const teamRows = teamNames.map((teamName) => ({

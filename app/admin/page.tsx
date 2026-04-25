@@ -256,12 +256,13 @@ function CreateSessionPanel() {
   const { createSession } = useArena()
   const [name, setName] = useState("")
   const [durationMinutes, setDurationMinutes] = useState(45)
-  const [teamNamesText, setTeamNamesText] = useState("")
   const [challengePool, setChallengePool] = useState<Array<{ id: number; title: string; description: string; difficulty: string; points: number }>>([])
   const [selectedChallengeIds, setSelectedChallengeIds] = useState<number[]>([])
   const [teamCsvNames, setTeamCsvNames] = useState<string[]>([])
   const [questionCsvRows, setQuestionCsvRows] = useState<ParsedQuestionRow[]>([])
   const [csvError, setCsvError] = useState<string | null>(null)
+  const [showTeamPreview, setShowTeamPreview] = useState(false)
+  const [showQuestionPreview, setShowQuestionPreview] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -277,16 +278,13 @@ function CreateSessionPanel() {
       if (!mounted || !data?.challenges) return
 
       setChallengePool(data.challenges)
-      if (selectedChallengeIds.length === 0) {
-        setSelectedChallengeIds(data.challenges.slice(0, 25).map((entry) => entry.id))
-      }
     }
 
     void loadChallengePool()
     return () => {
       mounted = false
     }
-  }, [selectedChallengeIds.length])
+  }, [])
 
   const toggleChallenge = (challengeId: number) => {
     setSelectedChallengeIds((prev) => {
@@ -305,9 +303,11 @@ function CreateSessionPanel() {
       const text = await file.text()
       const parsed = parseTeamsCsv(text)
       setTeamCsvNames(parsed)
+      setShowTeamPreview(false)
       setCsvError(null)
     } catch {
       setCsvError("Failed to parse teams CSV file")
+      setShowTeamPreview(false)
     } finally {
       event.target.value = ""
     }
@@ -321,9 +321,11 @@ function CreateSessionPanel() {
       const text = await file.text()
       const parsed = parseQuestionsCsv(text)
       setQuestionCsvRows(parsed)
+      setShowQuestionPreview(false)
       setCsvError(null)
     } catch (error) {
       setCsvError(error instanceof Error ? error.message : "Failed to parse questions CSV file")
+      setShowQuestionPreview(false)
     } finally {
       event.target.value = ""
     }
@@ -331,28 +333,34 @@ function CreateSessionPanel() {
 
   const handleCreate = async () => {
     if (!name.trim()) return
+    if (selectedChallengeIds.length === 0 && questionCsvRows.length === 0) {
+      setCsvError("Select challenges or upload a questions CSV before creating a session.")
+      return
+    }
 
-    const teamNames = teamNamesText
-      .split(/[,\n]/)
-      .map((entry) => entry.trim())
-      .filter(Boolean)
+    const importedTeamNames = Array.from(new Set(teamCsvNames))
 
+    try {
+      setCsvError(null)
+      await createSession({
+        name,
+        durationMinutes,
+        challengeIds: selectedChallengeIds,
+        teamNames: importedTeamNames,
+        questionRows: questionCsvRows,
+      })
 
-    const mergedTeamNames = Array.from(new Set([...teamNames, ...teamCsvNames]))
-    await createSession({
-      name,
-      durationMinutes,
-      challengeIds: selectedChallengeIds,
-      teamNames: mergedTeamNames,
-      questionRows: questionCsvRows,
-    })
-
-    setName("")
-    setDurationMinutes(45)
-    setTeamNamesText("")
-    setTeamCsvNames([])
-    setQuestionCsvRows([])
-    setCsvError(null)
+      setName("")
+      setDurationMinutes(45)
+      setTeamCsvNames([])
+      setQuestionCsvRows([])
+      setShowTeamPreview(false)
+      setShowQuestionPreview(false)
+      setCsvError(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create session"
+      setCsvError(message)
+    }
   }
 
   return (
@@ -373,26 +381,35 @@ function CreateSessionPanel() {
             className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 focus:outline-none focus:bg-amber-100/70 transition-colors"
           />
         </div>
-        <div>
-          <FormLabel>Initial Teams (Comma or Newline Separated)</FormLabel>
-          <textarea
-            value={teamNamesText}
-            onChange={(event) => setTeamNamesText(event.target.value)}
-            placeholder="Team Alpha, Team Beta"
-            className="w-full min-h-20 resize-y px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors"
+        <div className="rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
+          <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Teams CSV Upload (Optional)</label>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => void handleTeamCsvUpload(event)}
+            className="mt-2 w-full text-sm"
           />
-          <div className="mt-3 rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
-            <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Teams CSV Upload</label>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(event) => void handleTeamCsvUpload(event)}
-              className="mt-2 w-full text-sm"
-            />
-            <p className="mt-2 font-serif text-xs text-stone-600">
-              CSV headers supported: name, team, or team_name. Parsed teams: {teamCsvNames.length}
-            </p>
+          <p className="mt-2 font-serif text-xs text-stone-600">
+            CSV headers supported: name, team, or team_name. Parsed teams: {teamCsvNames.length}
+          </p>
+          <div className="mt-2">
+            <Btn
+              variant="stop"
+              onClick={() => setShowTeamPreview((prev) => !prev)}
+              disabled={teamCsvNames.length === 0}
+            >
+              {showTeamPreview ? "HIDE TEAMS PREVIEW" : "PREVIEW TEAMS CSV"}
+            </Btn>
           </div>
+          {showTeamPreview && (
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+              {teamCsvNames.map((teamName, index) => (
+                <p key={`${teamName}-${index}`} className="px-2 py-1 font-serif text-sm text-stone-800">
+                  {index + 1}. {teamName}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <FormLabel>Questions For This Session ({selectedChallengeIds.length} selected)</FormLabel>
@@ -407,6 +424,28 @@ function CreateSessionPanel() {
             <p className="mt-2 font-serif text-xs text-stone-600">
               Required headers: title, description, difficulty. Optional: points. Parsed questions: {questionCsvRows.length}
             </p>
+            <div className="mt-2">
+              <Btn
+                variant="stop"
+                onClick={() => setShowQuestionPreview((prev) => !prev)}
+                disabled={questionCsvRows.length === 0}
+              >
+                {showQuestionPreview ? "HIDE QUESTIONS PREVIEW" : "PREVIEW QUESTIONS CSV"}
+              </Btn>
+            </div>
+            {showQuestionPreview && (
+              <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+                {questionCsvRows.map((row, index) => (
+                  <div key={`${row.title}-${index}`} className="rounded border border-stone-300 bg-white/70 px-2 py-2 mb-2">
+                    <p className="font-serif text-sm font-bold text-stone-900">{index + 1}. {row.title}</p>
+                    <p className="font-serif text-xs text-stone-700 mt-1">{row.description}</p>
+                    <p className="font-serif text-[11px] uppercase tracking-wider text-stone-600 mt-1">
+                      {row.difficulty}{typeof row.points === "number" ? ` • ${row.points} pts` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="max-h-52 overflow-y-auto rounded-lg border-2 border-stone-900 bg-white/60 p-2">
             {challengePool.map((challenge) => (
@@ -423,8 +462,8 @@ function CreateSessionPanel() {
               <p className="px-2 py-1 font-serif text-sm text-stone-500">No challenges available.</p>
             )}
           </div>
-          <p className="mt-1 font-serif text-xs text-stone-600">
-            If fewer than 25 are selected, remaining slots are auto-filled from the global pool.
+          <p className="mt-2 font-serif text-xs text-stone-600">
+            Select at least one challenge, or upload questions CSV.
           </p>
         </div>
         {csvError && (
@@ -435,7 +474,7 @@ function CreateSessionPanel() {
         <Btn
           variant="gold"
           onClick={handleCreate}
-          disabled={!name.trim() || durationMinutes <= 0}
+          disabled={!name.trim() || durationMinutes <= 0 || (selectedChallengeIds.length === 0 && questionCsvRows.length === 0)}
           className="w-full py-3"
         >
           CREATE SESSION WITH SETUP
@@ -573,10 +612,12 @@ function MissionControlCard() {
               ))}
             </select>
           </div>
-          <Btn variant="default" className="w-full sm:w-auto">
-            <LogOut className="w-4 h-4" />
-            SIGN OUT
-          </Btn>
+          <form action="/admin/logout" method="post" className="w-full sm:w-auto">
+            <Btn variant="default" type="submit" className="w-full sm:w-auto">
+              <LogOut className="w-4 h-4" />
+              SIGN OUT
+            </Btn>
+          </form>
         </div>
       </div>
     </Card>

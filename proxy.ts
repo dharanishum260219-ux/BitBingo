@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { buildPublicUrl } from "@/lib/admin-redirect"
+
 const ADMIN_COOKIE_NAME = "bitbingo_admin_access"
 const DEV_ADMIN_SECRET = "bitbingo-dev-admin"
 
@@ -25,18 +27,12 @@ export function proxy(request: NextRequest) {
   const configuredPasscode = getAdminPasscode()
 
   if (!configuredPasscode) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = "/admin/login"
-    loginUrl.search = "?setup=1"
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(buildPublicUrl(request, "/admin/login?setup=1"))
   }
 
   const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value ?? ""
   if (token !== configuredPasscode) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = "/admin/login"
-    loginUrl.search = ""
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(buildPublicUrl(request, "/admin/login"))
   }
 
   return NextResponse.next()

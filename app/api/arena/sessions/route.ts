@@ -44,16 +44,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "durationMinutes must be a positive number" }, { status: 400 })
   }
 
-  const sessionId = await createSession({
-    name,
-    durationMinutes,
-    challengeIds,
-    teamNames,
-    questionRows,
-  })
-  revalidatePath("/")
-  revalidatePath("/coordinator")
-  revalidatePath("/admin")
+  try {
+    const sessionId = await createSession({
+      name,
+      durationMinutes,
+      challengeIds,
+      teamNames,
+      questionRows,
+    })
+    revalidatePath("/")
+    revalidatePath("/coordinator")
+    revalidatePath("/admin")
 
-  return Response.json({ ok: true, sessionId })
+    return Response.json({ ok: true, sessionId })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create session"
+    return Response.json({ error: message }, { status: 500 })
+  }
 }

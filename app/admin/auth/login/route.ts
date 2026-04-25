@@ -5,6 +5,7 @@ import {
   getAdminPasscode,
   isValidAdminPasscode,
 } from "@/lib/admin-auth"
+import { buildPublicUrl } from "@/lib/admin-redirect"
 
 export async function POST(request: Request) {
   const formData = await request.formData()
@@ -14,10 +15,10 @@ export async function POST(request: Request) {
   const configuredSecret = getAdminPasscode()
 
   if (!configuredSecret || !isValidAdminPasscode(passcode)) {
-    return NextResponse.redirect(new URL("/admin/login?error=1", baseUrl), 303)
+    return NextResponse.redirect(buildPublicUrl(request, "/admin/login?error=1"), 303)
   }
 
-  const response = NextResponse.redirect(new URL("/admin", baseUrl), 303)
+  const response = NextResponse.redirect(buildPublicUrl(request, "/admin"), 303)
 
   response.cookies.set({
     name: ADMIN_COOKIE_NAME,

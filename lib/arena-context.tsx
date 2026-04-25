@@ -99,12 +99,15 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         const errorText = await response.text()
         if (errorText) {
+          let message = errorText
           try {
             const parsed = JSON.parse(errorText) as { error?: string }
-            throw new Error(parsed.error || errorText)
+            message = parsed.error || errorText
           } catch {
-            throw new Error(errorText)
+            message = errorText
           }
+
+          throw new Error(message)
         }
         throw new Error(`Request failed with ${response.status}`)
       }
