@@ -1,8 +1,14 @@
 import { revalidatePath } from "next/cache"
 
 import { logCompletion } from "@/lib/arena-service"
+import { ensureAdminAccess } from "@/lib/require-admin"
 
 export async function POST(request: Request) {
+  const unauthorized = await ensureAdminAccess()
+  if (unauthorized) {
+    return unauthorized
+  }
+
   const body = await request.json().catch(() => null)
   const participantId = typeof body?.participantId === "string" ? body.participantId : ""
   const challengeId = typeof body?.challengeId === "number" ? body.challengeId : Number(body?.challengeId)

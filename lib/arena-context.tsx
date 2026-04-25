@@ -1,8 +1,20 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { ArenaChallenge, ArenaCompletion, ArenaSession, ArenaSnapshot, ArenaTeam } from "@/lib/arena-types"
+
+const ARENA_SYNC_CHANNEL = "bitbingo-arena-sync"
+const ARENA_SYNC_STORAGE_KEY = "bitbingo-arena-sync-event"
+
+type ArenaSyncMessage = {
+  sourceId: string
+  timestamp: number
+}
+
+function createSyncSourceId() {
+  return globalThis.crypto?.randomUUID?.() ?? `arena-sync-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 interface ArenaContextValue {
   teams: ArenaTeam[]
@@ -16,6 +28,7 @@ interface ArenaContextValue {
   refreshArena: (sessionId?: string | null) => Promise<void>
   registerTeam: (name: string, sessionId?: string) => Promise<void>
   deleteTeam: (id: string) => Promise<void>
+  deleteSession: (id: string) => Promise<void>
   awardPoint: (id: string, sessionId?: string) => Promise<void>
   createSession: (input: {
     name: string
@@ -43,12 +56,25 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState<ArenaSnapshot>(EMPTY_SNAPSHOT)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const refreshRequestRef = useRef(0)
+  const syncSourceIdRef = useRef("")
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null)
 
-  const refreshArena = useCallback(async (sessionId?: string | null) => {
-    setIsLoading(true)
+  const ensureSyncSourceId = useCallback(() => {
+    if (!syncSourceIdRef.current) {
+      syncSourceIdRef.current = createSyncSourceId()
+    }
+
+    return syncSourceIdRef.current
+  }, [])
+
+  const refreshArenaInternal = useCallback(async (sessionId?: string | null, showLoading = true) => {
     const scopedSessionId = sessionId ?? selectedSessionId
-
-    setSnapshot(EMPTY_SNAPSHOT)
+    const requestId = refreshRequestRef.current + 1
+    refreshRequestRef.current = requestId
+    if (showLoading) {
+      setIsLoading(true)
+    }
 
     try {
       const search = new URLSearchParams()
@@ -62,17 +88,47 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       }
 
       const data = (await response.json()) as ArenaSnapshot
+      if (requestId !== refreshRequestRef.current) {
+        return
+      }
+
       setSnapshot(data)
 
-      if (!selectedSessionId && data.selectedSessionId) {
+      if (data.selectedSessionId !== selectedSessionId) {
         setSelectedSessionId(data.selectedSessionId)
       }
     } catch {
-      setSnapshot(EMPTY_SNAPSHOT)
+      if (showLoading && requestId === refreshRequestRef.current) {
+        setSnapshot(EMPTY_SNAPSHOT)
+      }
     } finally {
-      setIsLoading(false)
+      if (showLoading && requestId === refreshRequestRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [selectedSessionId])
+
+  const refreshArena = useCallback(async (sessionId?: string | null) => {
+    await refreshArenaInternal(sessionId, true)
+  }, [refreshArenaInternal])
+
+  const refreshArenaSilently = useCallback(async (sessionId?: string | null) => {
+    await refreshArenaInternal(sessionId, false)
+  }, [refreshArenaInternal])
+
+  const publishArenaRefresh = useCallback(() => {
+    const sourceId = ensureSyncSourceId()
+    const message: ArenaSyncMessage = {
+      sourceId,
+      timestamp: Date.now(),
+    }
+
+    broadcastChannelRef.current?.postMessage(message)
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ARENA_SYNC_STORAGE_KEY, JSON.stringify(message))
+    }
+  }, [ensureSyncSourceId])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -86,8 +142,80 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshArena, selectedSessionId])
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    ensureSyncSourceId()
+
+    let cancelled = false
+
+    const handleSyncMessage = (message: ArenaSyncMessage) => {
+      if (message.sourceId === syncSourceIdRef.current || cancelled) {
+        return
+      }
+
+      void refreshArenaSilently()
+    }
+
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel(ARENA_SYNC_CHANNEL)
+      broadcastChannelRef.current = channel
+      channel.onmessage = (event) => {
+        const message = event.data as ArenaSyncMessage | null
+        if (!message || typeof message.sourceId !== "string") {
+          return
+        }
+
+        handleSyncMessage(message)
+      }
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== ARENA_SYNC_STORAGE_KEY || !event.newValue) {
+        return
+      }
+
+      try {
+        const message = JSON.parse(event.newValue) as ArenaSyncMessage
+        if (message && typeof message.sourceId === "string") {
+          handleSyncMessage(message)
+        }
+      } catch {
+        // Ignore malformed sync events.
+      }
+    }
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        void refreshArenaSilently()
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshArenaSilently()
+      }
+    }, 5000)
+
+    window.addEventListener("storage", handleStorage)
+    window.addEventListener("focus", handleVisibilityOrFocus)
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener("storage", handleStorage)
+      window.removeEventListener("focus", handleVisibilityOrFocus)
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus)
+      broadcastChannelRef.current?.close()
+      broadcastChannelRef.current = null
+    }
+  }, [ensureSyncSourceId, refreshArenaSilently])
+
   const callMutation = useCallback(
-    async (path: string, init: RequestInit) => {
+    async (path: string, init: RequestInit, options?: { refreshSessionId?: string | null }) => {
       const response = await fetch(path, {
         ...init,
         headers: {
@@ -113,15 +241,17 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       }
 
       const data = (await response.json().catch(() => null)) as Record<string, unknown> | null
-      await refreshArena()
+      await refreshArena(options?.refreshSessionId)
+      publishArenaRefresh()
       return data
     },
-    [refreshArena],
+    [publishArenaRefresh, refreshArena],
   )
 
   const selectSession = useCallback((sessionId: string) => {
-    setSelectedSessionId(sessionId)
-    void refreshArena(sessionId)
+    const normalizedSessionId = sessionId.trim() || null
+    setSelectedSessionId(normalizedSessionId)
+    void refreshArena(normalizedSessionId)
   }, [refreshArena])
 
   const registerTeam = useCallback(
@@ -144,6 +274,23 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       await callMutation(`/api/arena/teams/${id}`, { method: "DELETE" })
     },
     [callMutation],
+  )
+
+  const deleteSession = useCallback(
+    async (id: string) => {
+      const shouldResetSelection = selectedSessionId === id
+
+      await callMutation(
+        `/api/arena/sessions/${id}`,
+        { method: "DELETE" },
+        { refreshSessionId: shouldResetSelection ? null : undefined },
+      )
+
+      if (shouldResetSelection) {
+        setSelectedSessionId(null)
+      }
+    },
+    [callMutation, selectedSessionId],
   )
 
   const awardPoint = useCallback(
@@ -217,6 +364,7 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       refreshArena,
       registerTeam,
       deleteTeam,
+      deleteSession,
       awardPoint,
       createSession,
       stopSession,
@@ -226,6 +374,7 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       awardPoint,
       createSession,
       deleteTeam,
+      deleteSession,
       isLoading,
       logCompletion,
       refreshArena,

@@ -163,7 +163,7 @@ async function incrementParticipantScore(client: SupabaseClient, participantId: 
 }
 
 export async function getArenaSnapshot(sessionId?: string | null): Promise<ArenaSnapshot> {
-  const client = createSupabaseClient(true)
+  const client = createSupabaseClient(false)
 
   if (!client) {
     return buildSnapshot(ENABLE_DEMO_DATA ? getDemoState() : getEmptyStore(), sessionId ?? null)
@@ -232,7 +232,7 @@ export async function getChallenges(sessionId: string): Promise<ArenaSnapshot["c
 }
 
 export async function getChallengePool() {
-  const client = createSupabaseClient(true)
+  const client = createSupabaseClient(false)
   if (!client) {
     return ENABLE_DEMO_DATA ? DEMO_CHALLENGES : []
   }
@@ -474,7 +474,6 @@ async function seedSessionChallenges(client: SupabaseClient, sessionId: string, 
     .from("challenges")
     .select("id")
     .order("id", { ascending: true })
-    .limit(25)
 
   if (challengesError || !challengeRows) {
     throw challengesError ?? new Error("Unable to fetch challenges")
@@ -613,6 +612,20 @@ export async function stopSession(id: string) {
   }
 
   await client.from("sessions").update({ is_active: false }).eq("id", id)
+}
+
+export async function deleteSession(id: string) {
+  const client = createSupabaseClient(true)
+  if (!client) {
+    const store = getDemoState()
+    store.sessions = store.sessions.filter((session) => session.id !== id)
+    store.participants = store.participants.filter((participant) => participant.session_id !== id)
+    store.session_challenges = store.session_challenges.filter((entry) => entry.session_id !== id)
+    store.completions = store.completions.filter((completion) => completion.session_id !== id)
+    return
+  }
+
+  await client.from("sessions").delete().eq("id", id)
 }
 
 export async function logCompletion(input: {

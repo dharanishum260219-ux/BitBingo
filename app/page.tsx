@@ -298,21 +298,23 @@ export default function HomeArena() {
 
   const bingoTiles = useMemo<BoardTile[]>(
     () =>
-      challenges.map((challenge) => ({
-        id: challenge.position,
-        label: challenge.title,
-        description: challenge.description,
-        points: challenge.points,
-        specialType: challenge.specialType,
-        completed: challenge.completed,
-        completedBy: challenge.completedBy,
-        completedAt: challenge.completedAt,
-        proofUrl: challenge.proofUrl,
-        sessionName: challenge.sessionName ?? selectedSession?.name ?? null,
-        isFreeSpace: challenge.position === 12,
-        icon: questIcons[challenge.position % questIcons.length],
-      })),
-    [challenges, selectedSession?.name],
+      challenges
+        .filter((challenge) => !selectedSessionId || challenge.sessionId === selectedSessionId)
+        .map((challenge) => ({
+          id: challenge.position,
+          label: challenge.title,
+          description: challenge.description,
+          points: challenge.points,
+          specialType: challenge.specialType,
+          completed: challenge.completed,
+          completedBy: challenge.completedBy,
+          completedAt: challenge.completedAt,
+          proofUrl: challenge.proofUrl,
+          sessionName: challenge.sessionName ?? selectedSession?.name ?? null,
+          isFreeSpace: challenge.position === 12,
+          icon: questIcons[challenge.position % questIcons.length],
+        })),
+    [challenges, selectedSession?.name, selectedSessionId],
   )
 
   const handleTileClick = (id: number) => {

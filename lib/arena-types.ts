@@ -38,6 +38,7 @@ export interface ArenaChallenge {
   description: string
   difficulty: string
   position: number
+  sessionId: string
   points: number
   specialType: ChallengeSpecialType
   completed: boolean
@@ -74,6 +75,7 @@ export interface SessionRow {
 
 export interface ChallengeRow {
   id: number
+  session_id: string | null
   title: string
   description: string
   difficulty: string
@@ -135,6 +137,7 @@ const DEMO_CHALLENGE_DATA = [
 
 export const DEMO_CHALLENGES: ChallengeRow[] = DEMO_CHALLENGE_DATA.map(([title, description, difficulty, points], idx) => ({
   id: idx + 1,
+  session_id: null,
   title,
   description,
   difficulty,
@@ -290,6 +293,7 @@ export function buildSnapshot(store: ArenaStore, selectedSessionId: string | nul
         description: challenge.description,
         difficulty: challenge.difficulty,
         position: sessionChallenge.position,
+        sessionId: sessionChallenge.session_id,
         points: challenge.points,
         specialType: getChallengeSpecialType(sessionChallenge.position),
         completed: Boolean(completion),

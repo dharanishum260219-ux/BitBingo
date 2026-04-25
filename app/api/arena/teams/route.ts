@@ -1,8 +1,14 @@
 import { revalidatePath } from "next/cache"
 
 import { registerTeam } from "@/lib/arena-service"
+import { ensureAdminAccess } from "@/lib/require-admin"
 
 export async function POST(request: Request) {
+  const unauthorized = await ensureAdminAccess()
+  if (unauthorized) {
+    return unauthorized
+  }
+
   const body = await request.json().catch(() => null)
   const name = typeof body?.name === "string" ? body.name : ""
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId : ""

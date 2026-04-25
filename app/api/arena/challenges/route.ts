@@ -1,4 +1,5 @@
 import { getChallengePool, upsertChallengePool } from "@/lib/arena-service"
+import { ensureAdminAccess } from "@/lib/require-admin"
 
 export async function GET() {
   const challenges = await getChallengePool()
@@ -6,6 +7,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await ensureAdminAccess()
+  if (unauthorized) {
+    return unauthorized
+  }
+
   const body = await request.json().catch(() => null)
   const rows = Array.isArray(body?.rows)
     ? body.rows
