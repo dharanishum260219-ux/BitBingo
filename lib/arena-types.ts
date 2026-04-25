@@ -75,7 +75,7 @@ export interface SessionRow {
 
 export interface ChallengeRow {
   id: number
-  session_id: string | null
+  session_id?: string | null
   title: string
   description: string
   difficulty: string
