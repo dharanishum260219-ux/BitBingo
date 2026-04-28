@@ -24,6 +24,7 @@ import {
   Clock,
   Award,
   Settings,
+  Download,
 } from "lucide-react"
 
 interface BoardTile {
@@ -159,6 +160,189 @@ function ProgressBar({ value }: { value: number }) {
         className="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all duration-500"
         style={{ width: `${Math.min(value, 100)}%` }}
       />
+    </div>
+  )
+}
+
+function SessionTimer({ session, teams, challenges, onSessionEnd }: { session: any; teams: any[]; challenges: any[]; onSessionEnd: () => void }) {
+  const [remainingMs, setRemainingMs] = useState(0)
+  const [isSessionActive, setIsSessionActive] = useState(true)
+
+  useEffect(() => {
+    const updateTimer = () => {
+      if (!session) {
+        setRemainingMs(0)
+        return
+      }
+
+      const startTime = new Date(session.startedAt).getTime()
+      const endTime = startTime + session.durationMinutes * 60 * 1000
+      const now = Date.now()
+      const remaining = Math.max(0, endTime - now)
+
+      setRemainingMs(remaining)
+
+      if (remaining === 0 && isSessionActive) {
+        setIsSessionActive(false)
+        onSessionEnd()
+      }
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+    return () => clearInterval(interval)
+  }, [session, isSessionActive, onSessionEnd])
+
+  const minutes = Math.floor(remainingMs / 60000)
+  const seconds = Math.floor((remainingMs % 60000) / 1000)
+  const isLowTime = remainingMs < 60000
+
+  const generatePDFReport = () => {
+    const completions = challenges.filter((c) => c.completed)
+    const sortedTeams = [...teams].sort((a, b) => b.score - a.score)
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; background: #f8f1dc; }
+          .header { text-align: center; border-bottom: 2px solid #78350f; padding-bottom: 20px; margin-bottom: 20px; }
+          .header h1 { color: #57350d; font-size: 28px; margin: 0; }
+          .header p { color: #92400e; margin: 5px 0; }
+          .section { margin-bottom: 30px; page-break-inside: avoid; }
+          .section h2 { background: #78350f; color: #fef3c7; padding: 10px 15px; margin: 0; font-size: 18px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #d4a574; padding: 10px; text-align: left; }
+          th { background: #f3e8d8; color: #78350f; font-weight: bold; }
+          tr:nth-child(even) { background: #fef3c7; }
+          .rank-1 { background: #fbbf24 !important; font-weight: bold; }
+          .timestamp { color: #666; font-size: 12px; }
+          .total { font-weight: bold; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🎯 BitBingo Event Report</h1>
+          <p>Session: <strong>${session.name}</strong></p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+          <p>Duration: ${session.durationMinutes} minutes</p>
+        </div>
+
+        <div class="section">
+          <h2>🏆 Final Leaderboard</h2>
+          <table>
+            <tr>
+              <th>#</th>
+              <th>Team Name</th>
+              <th>Total Points</th>
+              <th>Status</th>
+            </tr>
+            ${sortedTeams
+              .map(
+                (team, i) => `
+            <tr ${i === 0 ? 'class="rank-1"' : ""}>
+              <td>${i + 1}</td>
+              <td>${team.name}</td>
+              <td class="total">${team.score} pts</td>
+              <td>${team.status}</td>
+            </tr>
+            `,
+              )
+              .join("")}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>✅ Completed Challenges</h2>
+          <table>
+            <tr>
+              <th>Challenge</th>
+              <th>Team</th>
+              <th>Points</th>
+              <th>Completed At</th>
+            </tr>
+            ${completions
+              .map(
+                (challenge) => `
+            <tr>
+              <td>${challenge.title}</td>
+              <td>${challenge.completedBy || "Unknown"}</td>
+              <td class="total">${challenge.points} pts</td>
+              <td class="timestamp">${new Date(challenge.completedAt).toLocaleString()}</td>
+            </tr>
+            `,
+              )
+              .join("")}
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>📊 Team Details</h2>
+          ${sortedTeams
+            .map(
+              (team) => `
+          <div style="margin-bottom: 20px; padding: 15px; background: #f3e8d8; border-left: 4px solid #78350f;">
+            <h3 style="margin: 0 0 10px 0; color: #57350d;">${team.name}</h3>
+            <p style="margin: 5px 0;"><strong>Total Score:</strong> ${team.score} points</p>
+            <p style="margin: 5px 0;"><strong>Status:</strong> ${team.status}</p>
+            <p style="margin: 5px 0;"><strong>Challenges Completed:</strong> ${completions.filter((c) => c.completedBy === team.name).length}</p>
+          </div>
+          `,
+            )
+            .join("")}
+        </div>
+      </body>
+      </html>
+    `
+
+    const blob = new Blob([html], { type: "text/html" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `BitBingo-Report-${session.name}-${new Date().getTime()}.html`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="bg-amber-100 border-4 border-stone-900 rounded-lg shadow-[6px_6px_0_rgba(0,0,0,1)] overflow-hidden">
+      <div className="bg-stone-800 px-4 py-3 flex items-center gap-3">
+        <Clock className="w-6 h-6 text-teal-400" />
+        <h2 className="font-serif text-xl font-bold text-amber-100 tracking-wide">Session Status</h2>
+      </div>
+      <div className="h-2 bg-gradient-to-r from-teal-600 via-emerald-500 to-teal-600" />
+
+      <div className="p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-center gap-4">
+          <div className={`text-center p-4 rounded-lg border-2 flex-1 ${isLowTime ? "border-red-600 bg-red-100" : "border-stone-700 bg-orange-50"}`}>
+            <p className="font-serif text-xs uppercase tracking-widest text-stone-600 mb-2">Time Remaining</p>
+            <p className={`font-serif text-4xl font-bold ${isLowTime ? "text-red-600 animate-pulse" : "text-stone-800"}`}>
+              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+            </p>
+          </div>
+
+          <div className="text-center p-4 rounded-lg border-2 border-stone-700 bg-amber-50 flex-1">
+            <p className="font-serif text-xs uppercase tracking-widest text-stone-600 mb-2">Status</p>
+            <p className={`font-serif text-lg font-bold ${isSessionActive ? "text-emerald-600" : "text-red-600"}`}>
+              {isSessionActive ? "ACTIVE" : "COMPLETED"}
+            </p>
+          </div>
+        </div>
+
+        {!isSessionActive && (
+          <button
+            onClick={generatePDFReport}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-600 to-blue-700 text-white font-serif font-bold uppercase tracking-wider rounded-lg border-2 border-blue-900 shadow-[4px_4px_0_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,1)] transition-all"
+          >
+            <Download className="w-5 h-5" />
+            Download Event Report
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -408,7 +592,17 @@ export default function HomeArena() {
 
             <section className="grid lg:grid-cols-5 gap-6">
               <div className="min-w-0 lg:col-span-2">
-                <BountyBoard />
+                <div className="space-y-6">
+                  <BountyBoard />
+                  {selectedSession && (
+                    <SessionTimer 
+                      session={selectedSession} 
+                      teams={teams} 
+                      challenges={bingoTiles} 
+                      onSessionEnd={() => {}}
+                    />
+                  )}
+                </div>
               </div>
               <div className="min-w-0 lg:col-span-3">
                 <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />
@@ -433,8 +627,8 @@ export default function HomeArena() {
         </>
       ) : (
         <div className="fixed inset-0 z-40 bg-[radial-gradient(circle_at_top,_#f8f1dc_0%,_#ead7a3_42%,_#d3b97b_100%)] overflow-y-auto">
-          <div className="mx-auto min-h-full w-full max-w-[1800px] px-3 md:px-6 py-3 md:py-5">
-            <div className="sticky top-3 z-50 mb-4 inline-flex">
+          <div className="mx-auto min-h-full w-full max-w-[1800px] px-3 md:px-6 py-3 md:py-5 pt-20">
+            <div className="fixed top-3 right-3 z-50">
               <button
                 type="button"
                 onClick={handleFullscreenToggle}
@@ -470,7 +664,17 @@ export default function HomeArena() {
 
             <section className="grid items-start gap-4 md:gap-6 xl:grid-cols-5">
               <div className="min-w-0 xl:col-span-2 xl:pt-3">
-                <BountyBoard />
+                <div className="space-y-6">
+                  <BountyBoard />
+                  {selectedSession && (
+                    <SessionTimer 
+                      session={selectedSession} 
+                      teams={teams} 
+                      challenges={bingoTiles} 
+                      onSessionEnd={() => {}}
+                    />
+                  )}
+                </div>
               </div>
               <div className="min-w-0 xl:col-span-3">
                 <QuestGrid tiles={bingoTiles} onTileClick={handleTileClick} />

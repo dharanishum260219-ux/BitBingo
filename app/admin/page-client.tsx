@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
+import { Modal } from "@/app/admin/modal-components"
 import {
   ArrowLeft,
   Play,
@@ -264,7 +265,7 @@ function CurrentSessionPanel() {
   )
 }
 
-function CreateSessionPanel() {
+function CreateSessionModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { createSession } = useArena()
   const [name, setName] = useState("")
   const [durationMinutes, setDurationMinutes] = useState(45)
@@ -402,6 +403,7 @@ function CreateSessionPanel() {
       setShowCoordinatorPreview(false)
       setShowQuestionPreview(false)
       setCsvError(null)
+      onClose()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create session"
       setCsvError(message)
@@ -409,9 +411,8 @@ function CreateSessionPanel() {
   }
 
   return (
-    <Card>
-      <CardHeader icon={<Plus className="w-6 h-6" />} title="Create Session" color="teal" />
-      <div className="p-5 space-y-4">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create New Session" size="lg">
+      <div className="space-y-4">
         <div>
           <FormLabel>Session Name</FormLabel>
           <TextInput value={name} onChange={setName} placeholder="Spring Sprint" />
@@ -442,7 +443,7 @@ function CreateSessionPanel() {
             value={coordinatorCsvText}
             onChange={(event) => handleCoordinatorCsvChange(event.target.value)}
             placeholder="usn\n1BM23CS001\n1BM23CS002"
-            className="mt-2 min-h-28 w-full rounded-lg border-2 border-stone-700 bg-white/80 px-3 py-2 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70"
+            className="mt-2 min-h-24 w-full rounded-lg border-2 border-stone-700 bg-white/80 px-3 py-2 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70"
           />
           <p className="mt-2 font-serif text-xs text-stone-600">
             Supported headers: usn, coordinator_usn, or coordinator. Parsed coordinators: {coordinatorUsns.length}
@@ -457,9 +458,9 @@ function CreateSessionPanel() {
             </Btn>
           </div>
           {showCoordinatorPreview && (
-            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+            <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
               {coordinatorUsns.map((usn, index) => (
-                <p key={`${usn}-${index}`} className="px-2 py-1 font-serif text-sm text-stone-800">
+                <p key={`${usn}-${index}`} className="px-2 py-1 font-serif text-xs text-stone-800">
                   {index + 1}. {usn}
                 </p>
               ))}
@@ -487,9 +488,9 @@ function CreateSessionPanel() {
             </Btn>
           </div>
           {showTeamPreview && (
-            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+            <div className="mt-3 max-h-32 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
               {teamCsvNames.map((teamName, index) => (
-                <p key={`${teamName}-${index}`} className="px-2 py-1 font-serif text-sm text-stone-800">
+                <p key={`${teamName}-${index}`} className="px-2 py-1 font-serif text-xs text-stone-800">
                   {index + 1}. {teamName}
                 </p>
               ))}
@@ -519,12 +520,12 @@ function CreateSessionPanel() {
               </Btn>
             </div>
             {showQuestionPreview && (
-              <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+              <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
                 {questionCsvRows.map((row, index) => (
                   <div key={`${row.title}-${index}`} className="rounded border border-stone-300 bg-white/70 px-2 py-2 mb-2">
-                    <p className="font-serif text-sm font-bold text-stone-900">{index + 1}. {row.title}</p>
+                    <p className="font-serif text-xs font-bold text-stone-900">{index + 1}. {row.title}</p>
                     <p className="font-serif text-xs text-stone-700 mt-1">{row.description}</p>
-                    <p className="font-serif text-[11px] uppercase tracking-wider text-stone-600 mt-1">
+                    <p className="font-serif text-[10px] uppercase tracking-wider text-stone-600 mt-1">
                       {row.difficulty}{typeof row.points === "number" ? ` • ${row.points} pts` : ""}
                     </p>
                   </div>
@@ -532,7 +533,7 @@ function CreateSessionPanel() {
               </div>
             )}
           </div>
-          <div className="max-h-52 overflow-y-auto rounded-lg border-2 border-stone-900 bg-white/60 p-2">
+          <div className="max-h-40 overflow-y-auto rounded-lg border-2 border-stone-900 bg-white/60 p-2 mb-3">
             {challengePool.map((challenge) => (
               <label key={challenge.id} className="mb-1 flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-amber-50">
                 <input
@@ -540,14 +541,14 @@ function CreateSessionPanel() {
                   checked={selectedChallengeIds.includes(challenge.id)}
                   onChange={() => toggleChallenge(challenge.id)}
                 />
-                <span className="font-serif text-sm text-stone-800">{challenge.title} ({challenge.difficulty}, {challenge.points} pts)</span>
+                <span className="font-serif text-xs text-stone-800">{challenge.title} ({challenge.difficulty}, {challenge.points} pts)</span>
               </label>
             ))}
             {challengePool.length === 0 && (
-              <p className="px-2 py-1 font-serif text-sm text-stone-500">No challenges available.</p>
+              <p className="px-2 py-1 font-serif text-xs text-stone-500">No challenges available.</p>
             )}
           </div>
-          <p className="mt-2 font-serif text-xs text-stone-600">
+          <p className="font-serif text-xs text-stone-600">
             Select at least one challenge, or upload questions CSV.
           </p>
         </div>
@@ -571,11 +572,40 @@ function CreateSessionPanel() {
           CREATE SESSION WITH SETUP
         </Btn>
       </div>
+    </Modal>
+  )
+}
+
+function CreateSessionButton() {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  return (
+    <>
+      <Btn
+        variant="gold"
+        onClick={() => setIsModalOpen(true)}
+        className="w-full py-3 flex items-center justify-center gap-2"
+      >
+        <Plus className="w-5 h-5" />
+        CREATE NEW SESSION
+      </Btn>
+      <CreateSessionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+    </>
+  )
+}
+
+function CreateSessionPanel() {
+  return (
+    <Card>
+      <CardHeader icon={<Plus className="w-6 h-6" />} title="Create Session" color="teal" />
+      <div className="p-5">
+        <CreateSessionButton />
+      </div>
     </Card>
   )
 }
 
-function RegisterTeamPanel() {
+function RegisterTeamModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { registerTeam, selectedSessionId } = useArena()
   const [name, setName] = useState("")
 
@@ -583,12 +613,12 @@ function RegisterTeamPanel() {
     if (!name.trim() || !selectedSessionId) return
     await registerTeam(name, selectedSessionId)
     setName("")
+    onClose()
   }
 
   return (
-    <Card>
-      <CardHeader icon={<Users className="w-6 h-6" />} title="Register Team" color="amber" />
-      <div className="p-5 space-y-4">
+    <Modal isOpen={isOpen} onClose={onClose} title="Register New Team" size="sm">
+      <div className="space-y-4">
         <div>
           <FormLabel>Team Name</FormLabel>
           <TextInput value={name} onChange={setName} placeholder="Neon Kraken Squad" />
@@ -602,40 +632,55 @@ function RegisterTeamPanel() {
           REGISTER TEAM
         </Btn>
       </div>
-    </Card>
+    </Modal>
   )
 }
 
-function ActiveRosterPanel() {
+function RegisterTeamPanel() {
   const { teams, deleteTeam, selectedSessionId } = useArena()
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
 
   return (
-    <Card>
-      <CardHeader icon={<Trophy className="w-6 h-6" />} title="Active Roster" color="amber" />
-      <div className="p-4">
-        {teams.length === 0 && (
-          <p className="text-center font-serif text-stone-500 py-4 text-sm">
-            No teams registered yet.
-          </p>
-        )}
-        <div className="flex flex-col divide-y divide-dashed divide-stone-400">
-          {teams.map((team) => (
-            <div key={team.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2">
-              <span className="font-cursive text-lg md:text-xl text-stone-800">{team.name}</span>
-              <div className="flex items-center gap-3 sm:ml-auto">
-                <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
-                  {team.score} PTS
-                </span>
-                <Btn variant="stop" onClick={() => void deleteTeam(team.id)} disabled={!selectedSessionId}>
-                  <Trash2 className="w-3 h-3" />
-                  DELETE TEAM
-                </Btn>
+    <>
+      <Card>
+        <CardHeader icon={<Users className="w-6 h-6" />} title="Active Roster" color="amber" />
+        <div className="p-4">
+          <div className="mb-4">
+            <Btn
+              variant="default"
+              onClick={() => setIsRegisterModalOpen(true)}
+              disabled={!selectedSessionId}
+              className="w-full flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              ADD TEAM
+            </Btn>
+          </div>
+          {teams.length === 0 && (
+            <p className="text-center font-serif text-stone-500 py-4 text-sm">
+              No teams registered yet.
+            </p>
+          )}
+          <div className="flex flex-col divide-y divide-dashed divide-stone-400">
+            {teams.map((team) => (
+              <div key={team.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2">
+                <span className="font-cursive text-lg md:text-xl text-stone-800">{team.name}</span>
+                <div className="flex items-center gap-3 sm:ml-auto">
+                  <span className="text-[10px] uppercase tracking-widest font-serif text-stone-500 whitespace-nowrap">
+                    {team.score} PTS
+                  </span>
+                  <Btn variant="stop" onClick={() => void deleteTeam(team.id)} disabled={!selectedSessionId}>
+                    <Trash2 className="w-3 h-3" />
+                    DELETE TEAM
+                  </Btn>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+      <RegisterTeamModal isOpen={isRegisterModalOpen} onClose={() => setIsRegisterModalOpen(false)} />
+    </>
   )
 }
 
@@ -779,10 +824,7 @@ export default function AdminPage() {
           <CreateSessionPanel />
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <RegisterTeamPanel />
-          <ActiveRosterPanel />
-        </div>
+        <RegisterTeamPanel />
 
         <SessionHistoryPanel />
       </main>
