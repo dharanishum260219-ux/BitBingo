@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import NextImage from "next/image"
 import { useArena } from "@/lib/arena-context"
 import { FantasyBackground } from "@/components/fantasy-background"
-import { ArrowLeft, Upload, Zap, Gem, Scroll, Users, Stamp } from "lucide-react"
+import { ArrowLeft, Upload, Zap, Gem, Scroll, Stamp, LogOut } from "lucide-react"
 
 const MAX_UPLOAD_FILE_BYTES = 12 * 1024 * 1024
 const MAX_PROCESSED_IMAGE_BYTES = 1_500_000
@@ -13,7 +14,7 @@ const TARGET_UPLOAD_QUALITY = 0.68
 
 function loadImageElement(objectUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
+    const image = new window.Image()
     image.onload = () => resolve(image)
     image.onerror = () => reject(new Error("Failed to process image."))
     image.src = objectUrl
@@ -256,20 +257,22 @@ function ControlDeckPanel() {
   const [submitError, setSubmitError] = useState("")
 
   useEffect(() => {
-    setSelectedTeamId("")
-    setSelectedQuest("")
-    setSubmitError("")
+    queueMicrotask(() => {
+      setSelectedTeamId("")
+      setSelectedQuest("")
+      setSubmitError("")
+    })
   }, [selectedSessionId])
 
   useEffect(() => {
     if (selectedTeamId && !teams.some((team) => team.id === selectedTeamId)) {
-      setSelectedTeamId("")
+      queueMicrotask(() => setSelectedTeamId(""))
     }
   }, [selectedTeamId, teams])
 
   useEffect(() => {
     if (selectedQuest && !challenges.some((challenge) => challenge.title === selectedQuest)) {
-      setSelectedQuest("")
+      queueMicrotask(() => setSelectedQuest(""))
     }
   }, [challenges, selectedQuest])
 
@@ -392,7 +395,14 @@ function ControlDeckPanel() {
             </label>
             {proofImageUrl && (
               <div className="mt-3 overflow-hidden rounded-lg border-2 border-stone-900 bg-white">
-                <img src={proofImageUrl} alt="Proof preview" className="h-auto w-full max-h-64 object-contain" />
+                <NextImage
+                  src={proofImageUrl}
+                  alt="Proof preview"
+                  width={1280}
+                  height={720}
+                  unoptimized
+                  className="h-auto w-full max-h-64 object-contain"
+                />
               </div>
             )}
             {proofImageUrl && (
@@ -457,7 +467,16 @@ export default function CoordinatorDeck() {
             Coordinator Deck
           </h1>
 
-          <div className="hidden md:block w-28" />
+          <form action="/coordinator/logout" method="post" className="w-full order-4 md:order-none md:w-auto md:min-w-28 flex justify-end">
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-teal-600 text-white font-sans font-bold text-xs md:text-base border-2 border-stone-900 rounded-lg hover:-translate-y-0.5 transition-all shadow-[0_2px_0_rgba(0,0,0,0.6)]"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="hidden sm:inline">Sign Out</span>
+              <span className="sm:hidden">Out</span>
+            </button>
+          </form>
         </div>
       </header>
 

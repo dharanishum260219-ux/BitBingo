@@ -1,5 +1,7 @@
 import { getChallengePoints, getChallengeSpecialType, type ChallengeSpecialType } from "@/lib/challenge-scoring"
 
+export const COORDINATOR_AUTH_PARTICIPANT_PREFIX = "__bitbingo_coordinator_auth__"
+
 export type TeamStatus = "Active" | "Disqualified"
 export type SessionStatus = "Active" | "Stopped"
 
@@ -71,6 +73,7 @@ export interface SessionRow {
   is_active: boolean
   duration_minutes: number
   created_at: string
+  coordinator_password_hash?: string
 }
 
 export interface ChallengeRow {
@@ -90,6 +93,13 @@ export interface SessionChallengeRow {
   created_at: string
 }
 
+export interface SessionCoordinatorRow {
+  id: string
+  session_id: string
+  usn: string
+  created_at: string
+}
+
 export interface CompletionRow {
   id: string
   participant_id: string
@@ -104,6 +114,7 @@ export interface ArenaStore {
   participants: ParticipantRow[]
   challenges: ChallengeRow[]
   session_challenges: SessionChallengeRow[]
+  session_coordinators: SessionCoordinatorRow[]
   completions: CompletionRow[]
 }
 
@@ -162,6 +173,8 @@ export const DEMO_SESSIONS: SessionRow[] = [
   },
 ]
 
+export const DEMO_SESSION_COORDINATORS: SessionCoordinatorRow[] = []
+
 export const DEMO_PARTICIPANTS: ParticipantRow[] = [
   { id: "1", name: "hinata", score: 1, session_id: "session-demo-1", created_at: new Date().toISOString() },
   { id: "2", name: "kakashi", score: 0, session_id: "session-demo-1", created_at: new Date().toISOString() },
@@ -202,6 +215,7 @@ export const DEMO_STORE: ArenaStore = {
   participants: DEMO_PARTICIPANTS,
   challenges: DEMO_CHALLENGES,
   session_challenges: DEMO_SESSION_CHALLENGES,
+  session_coordinators: DEMO_SESSION_COORDINATORS,
   completions: DEMO_COMPLETIONS,
 }
 
@@ -211,11 +225,16 @@ export function cloneDemoStore(): ArenaStore {
     participants: DEMO_STORE.participants.map((participant) => ({ ...participant })),
     challenges: DEMO_STORE.challenges.map((challenge) => ({ ...challenge })),
     session_challenges: DEMO_STORE.session_challenges.map((sessionChallenge) => ({ ...sessionChallenge })),
+    session_coordinators: DEMO_STORE.session_coordinators.map((sessionCoordinator) => ({ ...sessionCoordinator })),
     completions: DEMO_STORE.completions.map((completion) => ({ ...completion })),
   }
 }
 
 export function buildSnapshot(store: ArenaStore, selectedSessionId: string | null = null): ArenaSnapshot {
+  const visibleParticipants = store.participants.filter(
+    (participant) => !participant.name.startsWith(COORDINATOR_AUTH_PARTICIPANT_PREFIX),
+  )
+
   const sessions: ArenaSession[] = store.sessions
     .slice()
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -231,11 +250,11 @@ export function buildSnapshot(store: ArenaStore, selectedSessionId: string | nul
   const effectiveSessionId = selectedSessionId ?? activeSession?.id ?? sessions[0]?.id ?? null
 
   const challengeLookup = new Map(store.challenges.map((challenge) => [challenge.id, challenge]))
-  const participantLookup = new Map(store.participants.map((participant) => [participant.id, participant]))
+  const participantLookup = new Map(visibleParticipants.map((participant) => [participant.id, participant]))
   const sessionLookup = new Map(store.sessions.map((session) => [session.id, session]))
 
   const scopedParticipants = effectiveSessionId
-    ? store.participants.filter((participant) => participant.session_id === effectiveSessionId)
+    ? visibleParticipants.filter((participant) => participant.session_id === effectiveSessionId)
     : []
 
   const scopedSessionChallenges = effectiveSessionId

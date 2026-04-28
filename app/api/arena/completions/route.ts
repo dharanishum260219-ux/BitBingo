@@ -1,14 +1,11 @@
+import { NextRequest } from "next/server"
 import { revalidatePath } from "next/cache"
 
-import { logCompletion } from "@/lib/arena-service"
-import { ensureAdminAccess } from "@/lib/require-admin"
+import { hasAdminAccess } from "@/lib/admin-auth"
+import { isCoordinatorLinkedToSession, logCompletion } from "@/lib/arena-service"
+import { COORDINATOR_COOKIE_NAME, verifyCoordinatorAccessToken } from "@/lib/coordinator-auth"
 
-export async function POST(request: Request) {
-  const unauthorized = await ensureAdminAccess()
-  if (unauthorized) {
-    return unauthorized
-  }
-
+export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null)
   const participantId = typeof body?.participantId === "string" ? body.participantId : ""
   const challengeId = typeof body?.challengeId === "number" ? body.challengeId : Number(body?.challengeId)
@@ -17,6 +14,21 @@ export async function POST(request: Request) {
 
   if (!participantId || Number.isNaN(challengeId) || !sessionId) {
     return Response.json({ error: "participantId, challengeId, and sessionId are required" }, { status: 400 })
+  }
+
+  const adminAllowed = await hasAdminAccess()
+  if (!adminAllowed) {
+    const token = request.cookies.get(COORDINATOR_COOKIE_NAME)?.value ?? ""
+    const access = token ? await verifyCoordinatorAccessToken(token) : null
+
+    if (!access || access.sessionId !== sessionId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const linked = await isCoordinatorLinkedToSession(sessionId, access.usn)
+    if (!linked) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
   }
 
   try {

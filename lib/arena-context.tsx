@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import type { ArenaChallenge, ArenaCompletion, ArenaSession, ArenaSnapshot, ArenaTeam } from "@/lib/arena-types"
 
@@ -36,6 +37,8 @@ interface ArenaContextValue {
     challengeIds?: number[]
     teamNames?: string[]
     questionRows?: Array<{ title: string; description: string; difficulty: string; points?: number | null }>
+    coordinatorUsns: string[]
+    sessionPassword: string
   }) => Promise<void>
   stopSession: (id: string) => Promise<void>
   logCompletion: (input: { participantId: string; challengeId: number; proofUrl: string | null; sessionId?: string }) => Promise<void>
@@ -59,6 +62,9 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
   const refreshRequestRef = useRef(0)
   const syncSourceIdRef = useRef("")
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchSessionId = searchParams.get("session_id") ?? ""
 
   const ensureSyncSourceId = useCallback(() => {
     if (!syncSourceIdRef.current) {
@@ -141,6 +147,40 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       void refreshArena(selectedSessionId)
     }
   }, [refreshArena, selectedSessionId])
+
+  useEffect(() => {
+    if (!pathname.startsWith("/coordinator")) {
+      return
+    }
+
+    if (searchSessionId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedSessionId(searchSessionId)
+      return
+    }
+
+    let cancelled = false
+
+    const loadCoordinatorSession = async () => {
+      const response = await fetch("/api/coordinator/session", { cache: "no-store" })
+      if (!response.ok) {
+        return
+      }
+
+      const data = (await response.json().catch(() => null)) as { sessionId?: string } | null
+      if (cancelled || typeof data?.sessionId !== "string" || !data.sessionId) {
+        return
+      }
+
+      setSelectedSessionId(data.sessionId)
+    }
+
+    void loadCoordinatorSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pathname, searchSessionId])
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -315,6 +355,8 @@ export function ArenaProvider({ children }: { children: ReactNode }) {
       challengeIds?: number[]
       teamNames?: string[]
       questionRows?: Array<{ title: string; description: string; difficulty: string; points?: number | null }>
+      coordinatorUsns: string[]
+      sessionPassword: string
     }) => {
       const result = await callMutation("/api/arena/sessions", {
         method: "POST",

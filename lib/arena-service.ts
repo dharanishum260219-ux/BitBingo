@@ -2,8 +2,10 @@ import "server-only"
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { getChallengePoints } from "@/lib/challenge-scoring"
+import { hashCoordinatorPassword, normalizeCoordinatorUsn, verifyCoordinatorPassword } from "@/lib/coordinator-auth"
 
 import {
+  COORDINATOR_AUTH_PARTICIPANT_PREFIX,
   buildSnapshot,
   cloneDemoStore,
   DEMO_CHALLENGES,
@@ -17,6 +19,11 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
 const IS_PRODUCTION = process.env.NODE_ENV === "production"
 const ENABLE_DEMO_DATA = process.env.ENABLE_DEMO_DATA === "true"
+
+interface CoordinatorAuthPayload {
+  passwordHash: string
+  usns: string[]
+}
 
 function getMissingSupabaseEnv(serviceRole = false) {
   const missing: string[] = []
@@ -127,6 +134,48 @@ function normalizeTeamNames(teamNames: string[]) {
         .filter(Boolean),
     ),
   )
+}
+
+function normalizeCoordinatorNames(usns: string[]) {
+  return Array.from(
+    new Set(
+      usns
+        .map((usn) => normalizeCoordinatorUsn(usn))
+        .filter(Boolean),
+    ),
+  )
+}
+
+function encodeCoordinatorAuthPayload(payload: CoordinatorAuthPayload) {
+  return JSON.stringify({
+    passwordHash: payload.passwordHash,
+    usns: normalizeCoordinatorNames(payload.usns),
+  })
+}
+
+function buildCoordinatorAuthParticipantName(payload: CoordinatorAuthPayload) {
+  return `${COORDINATOR_AUTH_PARTICIPANT_PREFIX}:${encodeCoordinatorAuthPayload(payload)}`
+}
+
+function decodeCoordinatorAuthParticipantName(rawName: string | null | undefined) {
+  if (!rawName || !rawName.startsWith(`${COORDINATOR_AUTH_PARTICIPANT_PREFIX}:`)) {
+    return null
+  }
+
+  try {
+    const rawPayload = rawName.slice(COORDINATOR_AUTH_PARTICIPANT_PREFIX.length + 1)
+    const parsed = JSON.parse(rawPayload) as Partial<CoordinatorAuthPayload>
+    if (typeof parsed.passwordHash !== "string" || !Array.isArray(parsed.usns)) {
+      return null
+    }
+
+    return {
+      passwordHash: parsed.passwordHash,
+      usns: normalizeCoordinatorNames(parsed.usns.filter((usn): usn is string => typeof usn === "string")),
+    }
+  } catch {
+    return null
+  }
 }
 
 function pickSessionChallengeSet(challengeIds: number[], preferredChallengeIds: number[] = [], allowAutoFill = true) {
@@ -500,17 +549,29 @@ export async function createSession(input: {
   challengeIds?: number[]
   teamNames?: string[]
   questionRows?: ChallengeImportRow[]
+  coordinatorUsns: string[]
+  sessionPassword: string
 }) {
   const trimmed = input.name.trim()
   const durationMinutes = Number(input.durationMinutes)
   const challengeIds = (input.challengeIds ?? []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
   const teamNames = normalizeTeamNames(input.teamNames ?? [])
   const questionRows = input.questionRows ?? []
+  const coordinatorUsns = normalizeCoordinatorNames(input.coordinatorUsns ?? [])
+  const sessionPassword = input.sessionPassword.trim()
 
   if (!trimmed) return
   if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Duration must be a positive number")
   }
+  if (!sessionPassword) {
+    throw new Error("Session password is required")
+  }
+  if (coordinatorUsns.length === 0) {
+    throw new Error("Add at least one coordinator USN before creating a session")
+  }
+
+  const coordinatorPasswordHash = await hashCoordinatorPassword(sessionPassword)
 
   const client = createSupabaseClient(true)
   if (!client) {
@@ -540,7 +601,7 @@ export async function createSession(input: {
     const selected = pickSessionChallengeSet(
       store.challenges.map((challenge) => challenge.id),
       requestedChallengeIds,
-      false,
+      true,
     )
     const now = new Date().toISOString()
     const demoRows: SessionChallengeRow[] = selected.map((entry) => ({
@@ -562,6 +623,26 @@ export async function createSession(input: {
       })
     }
 
+    for (const usn of coordinatorUsns) {
+      store.session_coordinators.push({
+        id: crypto.randomUUID(),
+        session_id: sessionId,
+        usn,
+        created_at: now,
+      })
+    }
+
+    store.participants.push({
+      id: crypto.randomUUID(),
+      name: buildCoordinatorAuthParticipantName({
+        passwordHash: coordinatorPasswordHash,
+        usns: coordinatorUsns,
+      }),
+      score: 0,
+      session_id: sessionId,
+      created_at: now,
+    })
+
     return sessionId
   }
 
@@ -579,7 +660,11 @@ export async function createSession(input: {
 
   const { data: createdSession, error: sessionError } = await client
     .from("sessions")
-    .insert({ name: trimmed, is_active: true, duration_minutes: durationMinutes })
+    .insert({
+      name: trimmed,
+      is_active: true,
+      duration_minutes: durationMinutes,
+    })
     .select("id")
     .single()
 
@@ -587,7 +672,7 @@ export async function createSession(input: {
     throw sessionError ?? new Error("Unable to create session")
   }
 
-  await seedSessionChallenges(client, createdSession.id, requestedChallengeIds, false)
+  await seedSessionChallenges(client, createdSession.id, requestedChallengeIds, true)
 
   if (teamNames.length > 0) {
     const teamRows = teamNames.map((teamName) => ({
@@ -598,7 +683,140 @@ export async function createSession(input: {
     await client.from("participants").insert(teamRows)
   }
 
+  if (coordinatorUsns.length > 0) {
+    const coordinatorAuthRow = {
+      name: buildCoordinatorAuthParticipantName({
+        passwordHash: coordinatorPasswordHash,
+        usns: coordinatorUsns,
+      }),
+      score: 0,
+      session_id: createdSession.id,
+    }
+
+    const { error: authInsertError } = await client
+      .from("participants")
+      .insert(coordinatorAuthRow)
+
+    if (authInsertError) {
+      throw authInsertError
+    }
+  }
+
   return createdSession.id
+}
+
+export async function authenticateCoordinator(input: { sessionId: string; usn: string; password: string }) {
+  const normalizedUsn = normalizeCoordinatorUsn(input.usn)
+  const trimmedSessionId = input.sessionId.trim()
+  const trimmedPassword = input.password.trim()
+
+  if (!trimmedSessionId) {
+    throw new Error("Session is required")
+  }
+
+  if (!normalizedUsn) {
+    throw new Error("Coordinator USN is required")
+  }
+
+  if (!trimmedPassword) {
+    throw new Error("Session password is required")
+  }
+
+  const client = createSupabaseClient(true)
+  if (!client) {
+    const store = getDemoState()
+    const session = store.sessions.find((entry) => entry.id === trimmedSessionId)
+    if (!session) {
+      throw new Error("Session not found")
+    }
+
+    const passwordValid = await verifyCoordinatorPassword(trimmedPassword, session.coordinator_password_hash ?? "")
+    if (!passwordValid) {
+      throw new Error("Invalid session password")
+    }
+
+    const linked = store.session_coordinators.some(
+      (entry) => entry.session_id === trimmedSessionId && entry.usn === normalizedUsn,
+    )
+    if (!linked) {
+      throw new Error("Coordinator USN is not linked to this session")
+    }
+
+    return {
+      sessionId: trimmedSessionId,
+      usn: normalizedUsn,
+      sessionName: session.name,
+    }
+  }
+
+  const { data: authRow, error: authRowError } = await client
+    .from("participants")
+    .select("name")
+    .eq("session_id", trimmedSessionId)
+    .like("name", `${COORDINATOR_AUTH_PARTICIPANT_PREFIX}:%`)
+    .maybeSingle()
+
+  if (authRowError) {
+    throw authRowError
+  }
+
+  const authPayload = decodeCoordinatorAuthParticipantName(String(authRow?.name ?? ""))
+  if (!authPayload) {
+    throw new Error("Coordinator auth is not configured for this session")
+  }
+
+  const passwordValid = await verifyCoordinatorPassword(trimmedPassword, authPayload.passwordHash)
+  if (!passwordValid) {
+    throw new Error("Invalid session password")
+  }
+
+  if (!authPayload.usns.includes(normalizedUsn)) {
+    throw new Error("Coordinator USN is not linked to this session")
+  }
+
+  const { data: session, error: sessionError } = await client
+    .from("sessions")
+    .select("id,name")
+    .eq("id", trimmedSessionId)
+    .maybeSingle()
+
+  if (sessionError) {
+    throw sessionError
+  }
+
+  if (!session) {
+    throw new Error("Session not found")
+  }
+
+  return {
+    sessionId: trimmedSessionId,
+    usn: normalizedUsn,
+    sessionName: String(session.name ?? ""),
+  }
+}
+
+export async function isCoordinatorLinkedToSession(sessionId: string, usn: string) {
+  const normalizedUsn = normalizeCoordinatorUsn(usn)
+  const client = createSupabaseClient(true)
+
+  if (!client) {
+    const store = getDemoState()
+    return store.session_coordinators.some((entry) => entry.session_id === sessionId && entry.usn === normalizedUsn)
+  }
+
+  const { data: authRow, error: authRowError } = await client
+    .from("participants")
+    .select("name")
+    .eq("session_id", sessionId)
+    .like("name", `${COORDINATOR_AUTH_PARTICIPANT_PREFIX}:%`)
+    .maybeSingle()
+
+  if (authRowError) {
+    throw authRowError
+  }
+
+  const authPayload = decodeCoordinatorAuthParticipantName(String(authRow?.name ?? ""))
+  return Boolean(authPayload?.usns.includes(normalizedUsn))
 }
 
 export async function stopSession(id: string) {

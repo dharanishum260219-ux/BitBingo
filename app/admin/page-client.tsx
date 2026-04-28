@@ -98,6 +98,18 @@ function parseTeamsCsv(input: string) {
     .filter(Boolean)
 }
 
+function parseCoordinatorCsv(input: string) {
+  const rows = parseCsvText(input)
+  if (rows.length === 0) return []
+
+  const header = rows[0].map((cell) => cell.toLowerCase())
+  const usnIdx = header.findIndex((cell) => cell === "usn" || cell === "coordinator_usn" || cell === "coordinator")
+
+  const values = usnIdx >= 0 ? rows.slice(1).map((row) => row[usnIdx]?.trim() ?? "") : rows.map((row) => row[0]?.trim() ?? "")
+
+  return Array.from(new Set(values.map((value) => value.trim().toUpperCase()).filter(Boolean)))
+}
+
 function parseQuestionsCsv(input: string): ParsedQuestionRow[] {
   const rows = parseCsvText(input)
   if (rows.length === 0) return []
@@ -259,9 +271,13 @@ function CreateSessionPanel() {
   const [challengePool, setChallengePool] = useState<Array<{ id: number; title: string; description: string; difficulty: string; points: number }>>([])
   const [selectedChallengeIds, setSelectedChallengeIds] = useState<number[]>([])
   const [teamCsvNames, setTeamCsvNames] = useState<string[]>([])
+  const [coordinatorCsvText, setCoordinatorCsvText] = useState("")
+  const [coordinatorUsns, setCoordinatorUsns] = useState<string[]>([])
+  const [sessionPassword, setSessionPassword] = useState("")
   const [questionCsvRows, setQuestionCsvRows] = useState<ParsedQuestionRow[]>([])
   const [csvError, setCsvError] = useState<string | null>(null)
   const [showTeamPreview, setShowTeamPreview] = useState(false)
+  const [showCoordinatorPreview, setShowCoordinatorPreview] = useState(false)
   const [showQuestionPreview, setShowQuestionPreview] = useState(false)
 
   useEffect(() => {
@@ -331,10 +347,33 @@ function CreateSessionPanel() {
     }
   }
 
+  const handleCoordinatorCsvChange = (value: string) => {
+    setCoordinatorCsvText(value)
+
+    try {
+      setCoordinatorUsns(parseCoordinatorCsv(value))
+      setShowCoordinatorPreview(false)
+      setCsvError(null)
+    } catch {
+      setCsvError("Failed to parse coordinator USN CSV")
+      setShowCoordinatorPreview(false)
+    }
+  }
+
   const handleCreate = async () => {
     if (!name.trim()) return
     if (selectedChallengeIds.length === 0 && questionCsvRows.length === 0) {
       setCsvError("Select challenges or upload a questions CSV before creating a session.")
+      return
+    }
+
+    if (coordinatorUsns.length === 0) {
+      setCsvError("Add at least one coordinator USN before creating a session.")
+      return
+    }
+
+    if (!sessionPassword.trim()) {
+      setCsvError("Add a session password before creating a session.")
       return
     }
 
@@ -347,14 +386,20 @@ function CreateSessionPanel() {
         durationMinutes,
         challengeIds: selectedChallengeIds,
         teamNames: importedTeamNames,
+        coordinatorUsns,
+        sessionPassword,
         questionRows: questionCsvRows,
       })
 
       setName("")
       setDurationMinutes(45)
       setTeamCsvNames([])
+      setCoordinatorCsvText("")
+      setCoordinatorUsns([])
+      setSessionPassword("")
       setQuestionCsvRows([])
       setShowTeamPreview(false)
+      setShowCoordinatorPreview(false)
       setShowQuestionPreview(false)
       setCsvError(null)
     } catch (error) {
@@ -380,6 +425,46 @@ function CreateSessionPanel() {
             onChange={(event) => setDurationMinutes(Number(event.target.value || 0))}
             className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 focus:outline-none focus:bg-amber-100/70 transition-colors"
           />
+        </div>
+        <div>
+          <FormLabel>Session Password</FormLabel>
+          <input
+            type="password"
+            value={sessionPassword}
+            onChange={(event) => setSessionPassword(event.target.value)}
+            placeholder="Enter coordinator login password"
+            className="w-full px-4 py-3 bg-white/70 border-b-4 border-stone-900 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70 transition-colors"
+          />
+        </div>
+        <div className="rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
+          <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Coordinator USN CSV</label>
+          <textarea
+            value={coordinatorCsvText}
+            onChange={(event) => handleCoordinatorCsvChange(event.target.value)}
+            placeholder="usn\n1BM23CS001\n1BM23CS002"
+            className="mt-2 min-h-28 w-full rounded-lg border-2 border-stone-700 bg-white/80 px-3 py-2 font-serif text-stone-800 placeholder-stone-400 focus:outline-none focus:bg-amber-100/70"
+          />
+          <p className="mt-2 font-serif text-xs text-stone-600">
+            Supported headers: usn, coordinator_usn, or coordinator. Parsed coordinators: {coordinatorUsns.length}
+          </p>
+          <div className="mt-2">
+            <Btn
+              variant="stop"
+              onClick={() => setShowCoordinatorPreview((prev) => !prev)}
+              disabled={coordinatorUsns.length === 0}
+            >
+              {showCoordinatorPreview ? "HIDE COORDINATORS PREVIEW" : "PREVIEW COORDINATOR CSV"}
+            </Btn>
+          </div>
+          {showCoordinatorPreview && (
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border-2 border-stone-700 bg-amber-50 p-2">
+              {coordinatorUsns.map((usn, index) => (
+                <p key={`${usn}-${index}`} className="px-2 py-1 font-serif text-sm text-stone-800">
+                  {index + 1}. {usn}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
         <div className="rounded-lg border-2 border-dashed border-stone-700 bg-white/50 p-3">
           <label className="block font-serif text-xs uppercase tracking-widest text-stone-600">Teams CSV Upload (Optional)</label>
@@ -474,7 +559,13 @@ function CreateSessionPanel() {
         <Btn
           variant="gold"
           onClick={handleCreate}
-          disabled={!name.trim() || durationMinutes <= 0 || (selectedChallengeIds.length === 0 && questionCsvRows.length === 0)}
+          disabled={
+            !name.trim() ||
+            durationMinutes <= 0 ||
+            coordinatorUsns.length === 0 ||
+            !sessionPassword.trim() ||
+            (selectedChallengeIds.length === 0 && questionCsvRows.length === 0)
+          }
           className="w-full py-3"
         >
           CREATE SESSION WITH SETUP

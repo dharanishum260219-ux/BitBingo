@@ -20,6 +20,10 @@ export async function POST(request: Request) {
   const teamNames = Array.isArray(body?.teamNames)
     ? body.teamNames.filter((name: unknown): name is string => typeof name === "string")
     : []
+  const coordinatorUsns = Array.isArray(body?.coordinatorUsns)
+    ? body.coordinatorUsns.filter((usn: unknown): usn is string => typeof usn === "string")
+    : []
+  const sessionPassword = typeof body?.sessionPassword === "string" ? body.sessionPassword : ""
   const questionRows = Array.isArray(body?.questionRows)
     ? body.questionRows
         .map((row: unknown) => {
@@ -50,12 +54,22 @@ export async function POST(request: Request) {
     return Response.json({ error: "durationMinutes must be a positive number" }, { status: 400 })
   }
 
+  if (!sessionPassword.trim()) {
+    return Response.json({ error: "Session password is required" }, { status: 400 })
+  }
+
+  if (coordinatorUsns.length === 0) {
+    return Response.json({ error: "At least one coordinator USN is required" }, { status: 400 })
+  }
+
   try {
     const sessionId = await createSession({
       name,
       durationMinutes,
       challengeIds,
       teamNames,
+      coordinatorUsns,
+      sessionPassword,
       questionRows,
     })
     revalidatePath("/")
@@ -64,7 +78,14 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true, sessionId })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create session"
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error && "message" in error && typeof (error as { message?: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : typeof error === "string"
+            ? error
+            : "Failed to create session"
     return Response.json({ error: message }, { status: 500 })
   }
 }
