@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-page-custom-font */
+import { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
 import { ArenaProvider } from "@/lib/arena-context"
 import "./globals.css"
@@ -30,7 +31,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-serif antialiased min-h-screen">
-        <ArenaProvider>{children}</ArenaProvider>
+        <Suspense fallback={null}>
+          <ArenaProvider>{children}</ArenaProvider>
+        </Suspense>
       </body>
     </html>
   )

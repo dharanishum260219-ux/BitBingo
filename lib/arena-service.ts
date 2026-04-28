@@ -68,6 +68,7 @@ function getEmptyStore(): ArenaStore {
     participants: [],
     challenges: [],
     session_challenges: [],
+    session_coordinators: [],
     completions: [],
   }
 }
@@ -264,6 +265,7 @@ export async function getArenaSnapshot(sessionId?: string | null): Promise<Arena
     participants: participantsResult.data ?? [],
     challenges: challengesResult.data ?? [],
     session_challenges: sessionChallengesResult.data ?? [],
+    session_coordinators: [],
     completions: completionsResult.data ?? [],
   }
 

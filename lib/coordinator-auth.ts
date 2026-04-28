@@ -49,7 +49,7 @@ function constantTimeEqual(left: Uint8Array, right: Uint8Array) {
   return result === 0
 }
 
-async function derivePasswordBits(password: string, salt: Uint8Array, iterations: number) {
+async function derivePasswordBits(password: string, salt: BufferSource, iterations: number) {
   const keyMaterial = await crypto.subtle.importKey("raw", textEncoder.encode(password), "PBKDF2", false, ["deriveBits"])
   const derivedBits = await crypto.subtle.deriveBits(
     {
