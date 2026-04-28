@@ -3,7 +3,37 @@ const textEncoder = new TextEncoder()
 const COORDINATOR_PASSWORD_ITERATIONS = 120000
 const COORDINATOR_PASSWORD_SALT_BYTES = 16
 const COORDINATOR_PASSWORD_HASH_BYTES = 32
-const COORDINATOR_TOKEN_SECRET = process.env.COORDINATOR_PORTAL_SECRET ?? (process.env.NODE_ENV === "production" ? "" : "bitbingo-dev-coordinator")
+
+// Module-level secret that persists across requests within a deployment
+let COORDINATOR_TOKEN_SECRET: string | null = null
+
+function initializeCoordinatorTokenSecret(): string {
+  if (COORDINATOR_TOKEN_SECRET) {
+    return COORDINATOR_TOKEN_SECRET
+  }
+
+  let secret = process.env.COORDINATOR_PORTAL_SECRET
+
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      // Generate a random secret for production deployments
+      // Note: This won't survive deployment/cold starts, but keeps tokens secure
+      secret = globalThis.crypto?.randomUUID?.() ?? `secret-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      console.warn(
+        "⚠️  COORDINATOR_PORTAL_SECRET is not set in production. Generated a temporary secret. " +
+          "For persistent coordinator tokens across deployments, set COORDINATOR_PORTAL_SECRET in environment variables.",
+      )
+    } else {
+      // Use a fixed secret for development
+      secret = "bitbingo-dev-coordinator"
+    }
+  }
+
+  COORDINATOR_TOKEN_SECRET = secret
+  return secret
+}
+
+const COORDINATOR_TOKEN_SECRET_VALUE = initializeCoordinatorTokenSecret()
 
 export const COORDINATOR_COOKIE_NAME = "bitbingo_coordinator_access"
 
@@ -66,7 +96,7 @@ async function derivePasswordBits(password: string, salt: BufferSource, iteratio
 }
 
 async function signCoordinatorMessage(message: string) {
-  const key = await crypto.subtle.importKey("raw", textEncoder.encode(COORDINATOR_TOKEN_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+  const key = await crypto.subtle.importKey("raw", textEncoder.encode(COORDINATOR_TOKEN_SECRET_VALUE), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
   const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(message))
   return bytesToBase64Url(new Uint8Array(signature))
 }
@@ -115,7 +145,7 @@ export async function createCoordinatorAccessToken(payload: CoordinatorAccessTok
 export async function verifyCoordinatorAccessToken(token: string) {
   const [message, signature] = token.split(".")
 
-  if (!message || !signature || !COORDINATOR_TOKEN_SECRET) {
+  if (!message || !signature || !COORDINATOR_TOKEN_SECRET_VALUE) {
     return null
   }
 

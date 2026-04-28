@@ -360,7 +360,7 @@ function ControlDeckPanel() {
   }
 
   const teamOptions = teams.map((team) => ({ value: team.id, label: team.name }))
-  const questNames = challenges.map((challenge) => challenge.title)
+  const questNames = challenges.filter((challenge) => !challenge.completed).map((challenge) => challenge.title)
 
   return (
     <>
