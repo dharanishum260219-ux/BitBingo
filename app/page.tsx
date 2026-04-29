@@ -164,7 +164,7 @@ function ProgressBar({ value }: { value: number }) {
   )
 }
 
-function SessionTimer({ session, teams, challenges, onSessionEnd }: { session: any; teams: any[]; challenges: any[]; onSessionEnd: () => void }) {
+function SessionTimer({ session, teams, challenges, completions, onSessionEnd }: { session: any; teams: any[]; challenges: any[]; completions: any[]; onSessionEnd: () => void }) {
   const [remainingMs, setRemainingMs] = useState(0)
   const [isSessionActive, setIsSessionActive] = useState(true)
 
@@ -198,8 +198,7 @@ function SessionTimer({ session, teams, challenges, onSessionEnd }: { session: a
   const isLowTime = remainingMs < 60000
 
   const generatePDFReport = () => {
-    const completions = challenges.filter((c) => c.completed)
-    const sortedTeams = [...teams].sort((a, b) => b.score - a.score)
+    const sortedTeams = getRankedTeams(teams, completions)
 
     let html = `
       <!DOCTYPE html>
@@ -241,9 +240,9 @@ function SessionTimer({ session, teams, challenges, onSessionEnd }: { session: a
             </tr>
             ${sortedTeams
               .map(
-                (team, i) => `
-            <tr ${i === 0 ? 'class="rank-1"' : ""}>
-              <td>${i + 1}</td>
+                (team) => `
+            <tr ${team.rank === 1 ? 'class="rank-1"' : ""}>
+              <td>${team.rank}</td>
               <td>${team.name}</td>
               <td class="total">${team.score} pts</td>
               <td>${team.status}</td>
@@ -347,11 +346,35 @@ function SessionTimer({ session, teams, challenges, onSessionEnd }: { session: a
   )
 }
 
+// Helper function to calculate rankings with speed-based tiebreaker
+function getRankedTeams(teams: any[], completions: any[]) {
+  // Create a map to get first completion time for each team
+  const getTeamFirstCompletionTime = (teamId: string) => {
+    const teamCompletions = completions.filter(c => c.participantId === teamId)
+    if (teamCompletions.length === 0) return Infinity
+    return Math.min(...teamCompletions.map(c => new Date(c.createdAt).getTime()))
+  }
+
+  // Sort by score first, then by completion time (earlier is better)
+  const sorted = [...teams].sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score // Higher score wins
+    }
+    // Same score → faster completion wins
+    return getTeamFirstCompletionTime(a.id) - getTeamFirstCompletionTime(b.id)
+  })
+
+  // Assign ranks (same score = same rank)
+  return sorted.map((team, i, arr) => {
+    const prevTeam = arr[i - 1]
+    const rank = prevTeam && prevTeam.score === team.score ? arr[i - 1].rank : i + 1
+    return { ...team, rank }
+  })
+}
+
 function BountyBoard() {
-  const { teams } = useArena()
-  const ranked = [...teams]
-    .sort((a, b) => b.score - a.score)
-    .map((t, i) => ({ ...t, rank: i + 1 }))
+  const { teams, completions } = useArena()
+  const ranked = getRankedTeams(teams, completions)
   const maxScore = Math.max(...ranked.map((t) => t.score), 1)
 
   return (
@@ -465,7 +488,7 @@ function QuestGrid({ tiles, onTileClick }: { tiles: BoardTile[]; onTileClick: (i
 }
 
 export default function HomeArena() {
-  const { teams, challenges, sessions, selectedSessionId, selectSession, isLoading } = useArena()
+  const { teams, challenges, sessions, selectedSessionId, selectSession, isLoading, completions } = useArena()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedTile, setSelectedTile] = useState<BoardTile | null>(null)
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null
@@ -598,7 +621,8 @@ export default function HomeArena() {
                     <SessionTimer 
                       session={selectedSession} 
                       teams={teams} 
-                      challenges={bingoTiles} 
+                      challenges={bingoTiles}
+                      completions={completions}
                       onSessionEnd={() => {}}
                     />
                   )}
@@ -671,6 +695,7 @@ export default function HomeArena() {
                       session={selectedSession} 
                       teams={teams} 
                       challenges={bingoTiles} 
+                      completions={completions}
                       onSessionEnd={() => {}}
                     />
                   )}
