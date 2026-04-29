@@ -364,19 +364,8 @@ function getRankedTeams(teams: any[], completions: any[]) {
     return getTeamFirstCompletionTime(a.id) - getTeamFirstCompletionTime(b.id)
   })
 
-  // Assign ranks (same score = same rank)
-  return sorted.reduce((ranked: Array<any>, team: any, i: number) => {
-    if (i === 0) {
-      ranked.push({ ...team, rank: 1 })
-      return ranked
-    }
-
-    const prevTeam = sorted[i - 1]
-    const prevRank = ranked[i - 1].rank
-    const rank = prevTeam.score === team.score ? prevRank : i + 1
-    ranked.push({ ...team, rank })
-    return ranked
-  }, [])
+  // Assign a unique display position after sorting.
+  return sorted.map((team, i) => ({ ...team, rank: i + 1 }))
 }
 
 function BountyBoard() {
