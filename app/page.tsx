@@ -385,7 +385,7 @@ function BountyBoard() {
         {ranked.length === 0 && (
           <p className="text-center font-serif text-stone-500 py-4 text-sm">No teams yet.</p>
         )}
-        {ranked.map((team) => (
+        {ranked.slice(0, 5).map((team) => (
           <div
             key={team.id}
             className={`flex items-center gap-4 p-3 rounded-lg border-2 border-stone-700 transition-all hover:-translate-y-0.5 hover:shadow-[3px_3px_0_rgba(0,0,0,0.8)] ${
