@@ -266,10 +266,10 @@ function SessionTimer({ session, teams, challenges, completions, onSessionEnd }:
               .map(
                 (challenge) => `
             <tr>
-              <td>${challenge.title}</td>
-              <td>${challenge.completedBy || "Unknown"}</td>
-              <td class="total">${challenge.points} pts</td>
-              <td class="timestamp">${new Date(challenge.completedAt).toLocaleString()}</td>
+              <td>${challenge.challengeTitle || "Unknown"}</td>
+              <td>${challenge.participantName || "Unknown"}</td>
+              <td class="total">${challenge.challengePoints ?? 0} pts</td>
+              <td class="timestamp">${challenge.createdAt ? new Date(challenge.createdAt).toLocaleString() : "N/A"}</td>
             </tr>
             `,
               )
@@ -286,7 +286,7 @@ function SessionTimer({ session, teams, challenges, completions, onSessionEnd }:
             <h3 style="margin: 0 0 10px 0; color: #57350d;">${team.name}</h3>
             <p style="margin: 5px 0;"><strong>Total Score:</strong> ${team.score} points</p>
             <p style="margin: 5px 0;"><strong>Status:</strong> ${team.status}</p>
-            <p style="margin: 5px 0;"><strong>Challenges Completed:</strong> ${completions.filter((c) => c.completedBy === team.name).length}</p>
+            <p style="margin: 5px 0;"><strong>Challenges Completed:</strong> ${completions.filter((c) => c.participantName === team.name).length}</p>
           </div>
           `,
             )
@@ -365,11 +365,18 @@ function getRankedTeams(teams: any[], completions: any[]) {
   })
 
   // Assign ranks (same score = same rank)
-  return sorted.map((team, i, arr) => {
-    const prevTeam = arr[i - 1]
-    const rank = prevTeam && prevTeam.score === team.score ? arr[i - 1].rank : i + 1
-    return { ...team, rank }
-  })
+  return sorted.reduce((ranked: Array<any>, team: any, i: number) => {
+    if (i === 0) {
+      ranked.push({ ...team, rank: 1 })
+      return ranked
+    }
+
+    const prevTeam = sorted[i - 1]
+    const prevRank = ranked[i - 1].rank
+    const rank = prevTeam.score === team.score ? prevRank : i + 1
+    ranked.push({ ...team, rank })
+    return ranked
+  }, [])
 }
 
 function BountyBoard() {
